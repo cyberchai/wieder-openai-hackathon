@@ -1,12 +1,9 @@
 {
   "items": [
     {
-      "name": "matcha latte",
-      "size": "grande",
-      "modifiers": [
-        "iced",
-        "brown sugar syrup"
-      ]
+      "name": "mocha latte",
+      "size": "",
+      "modifiers": []
     }
   ],
   "fulfillment": {

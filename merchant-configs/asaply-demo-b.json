@@ -4,6 +4,7 @@
   "baseUrl": "http://localhost:3000/mock-cafe-b",
   "selectors": {
     "item.iced matcha latte": "[data-testid='sku-iced-matcha']",
+    "item.chai latte": "[data-testid='sku-chai-latte']",
     "item.cold brew": "[data-testid='sku-cold-brew']",
     "item.oat latte": "[data-testid='sku-oat-latte']",
     "size.small": "[data-testid='opt-size-s']",
@@ -28,6 +29,9 @@
       "matcha latter": "iced matcha latte",
       "iced matcha": "iced matcha latte",
       "green tea latte": "iced matcha latte",
+      "chai": "chai latte",
+      "masala chai": "chai latte",
+      "chai tea latte": "chai latte",
       "cb": "cold brew",
       "coldbrew": "cold brew",
       "oatmilk": "oat latte"
@@ -74,6 +78,10 @@
       {
         "name": "Iced Matcha Latte",
         "aliases": ["matcha latte", "matcha latter", "iced matcha", "green tea latte"]
+      },
+      {
+        "name": "Chai Latte",
+        "aliases": ["chai", "chai tea latte", "masala chai"]
       },
       {
         "name": "Cold Brew",

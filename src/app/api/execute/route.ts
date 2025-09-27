@@ -45,8 +45,9 @@ export async function POST(req: Request) {
     const exitCode: number = await new Promise((resolve) => {
       child.on("close", (code) => resolve(code ?? 1));
     });
+    const ok = /\[verify\]\s+RESULT:\s+PASS/.test(logs);
 
-    return NextResponse.json({ ok: exitCode === 0, exitCode, logs });
+    return NextResponse.json({ ok, exitCode, logs });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Execution failed" }, { status: 500 });

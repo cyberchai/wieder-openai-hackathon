@@ -30,6 +30,7 @@ export default function Home() {
   const [configKey, setConfigKey] = useState<ConfigKey>("a");
   const [feedback, setFeedback] = useState<string | null>(null);
   const [execLogs, setExecLogs] = useState<string>("");
+  const [execNotice, setExecNotice] = useState<string | null>(null);
   const [executing, setExecuting] = useState(false);
 
   useEffect(() => {
@@ -40,6 +41,7 @@ export default function Home() {
         setOut(null);
         setFeedback(null);
         setExecLogs("");
+        setExecNotice(null);
         return;
       }
       setEmail(u.email);
@@ -62,6 +64,7 @@ export default function Home() {
     setFeedback(null);
     setOut(null);
     setExecLogs("");
+    setExecNotice(null);
 
     try {
       const res = await fetch("/api/plan", {
@@ -80,13 +83,6 @@ export default function Home() {
       const planData = data as OrderJSON;
       setOut(planData);
       setFeedback("Plan generated successfully. Review the JSON below.");
-      fetch("/api/orders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: planData, merchant: configKey }),
-      }).catch(() => {
-        // non-blocking log sync; ignore failure
-      });
     } catch {
       setFeedback("Unable to reach the planner. Try again.");
     } finally {
@@ -107,6 +103,7 @@ export default function Home() {
     setExecuting(true);
     setFeedback("Running agent with selected merchant...");
     setExecLogs("");
+    setExecNotice(null);
 
     try {
       const res = await fetch("/api/execute", {
@@ -122,13 +119,27 @@ export default function Home() {
         setFeedback(data.error || "Agent execution failed.");
         return;
       }
-      if (typeof data.logs === "string") {
-        setExecLogs(data.logs);
-      }
-      if (data.ok) {
+      const logs = typeof data.logs === "string" ? data.logs : "";
+      setExecLogs(logs);
+      const pass = /\[verify\]\s+RESULT:\s+PASS/.test(logs);
+      if (pass) {
         setFeedback("Agent run complete.");
+        setExecNotice("Order verified and saved to history.");
+        fetch("/api/orders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ plan: out, merchant: configKey }),
+        }).catch(() => {
+          /* ignore logging errors */
+        });
       } else {
-        setFeedback(`Agent exited with code ${data.exitCode ?? "unknown"}.`);
+        const suggestMatches = logs.match(/^\[suggest\].*$/gm) || [];
+        const msg = suggestMatches.length
+          ? `Not on this menu. Suggestions:\n${suggestMatches.join("\n")}`
+          : "This item isn't on this menu. Try another item or a different store.";
+        setFeedback("Could not verify the order. Check the suggestions below.");
+        setExecNotice(msg);
+        console.warn(msg);
       }
     } catch {
       setFeedback("Unable to run the agent. Check the server logs.");
@@ -250,6 +261,9 @@ export default function Home() {
               <pre className={styles.logs}>
                 {execLogs || "Streaming logs..."}
               </pre>
+            )}
+            {execNotice && (
+              <div className={styles.feedback}>{execNotice}</div>
             )}
           </div>
         )}

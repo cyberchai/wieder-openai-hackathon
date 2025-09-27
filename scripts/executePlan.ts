@@ -40,40 +40,92 @@ function loadJSON<T>(p: string): T {
   return JSON.parse(fs.readFileSync(p, "utf8"));
 }
 
-function sel(cfg: Config, key: string) {
-  const s = cfg.selectors[key];
-  if (!s) throw new Error(`Missing selector for "${key}"`);
-  return s;
+function normStr(s?: string) {
+  return (s || "").toLowerCase().trim();
 }
 
-function resolveItemKey(cfg: Config, rawName: string): string | null {
-  const n = (rawName || "").toLowerCase().trim();
-  if (!n) return null;
+function levenshtein(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  const dp = Array.from({ length: m + 1 }, (_, i) => Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+    }
+  }
+  return dp[m][n];
+}
+
+function similarity(a: string, b: string): number {
+  a = normStr(a);
+  b = normStr(b);
+  if (!a || !b) return 0;
+  const dist = levenshtein(a, b);
+  const maxLen = Math.max(a.length, b.length) || 1;
+  return 1 - dist / maxLen;
+}
+
+function candidateItems(cfg: Config): string[] {
+  const namesFromSelectors = Object.keys(cfg.selectors || {})
+    .filter((k) => k.startsWith("item."))
+    .map((k) => k.replace(/^item\./, ""));
+  const namesFromMenu = (cfg.menu?.items || []).map((it) => normStr(it.name));
+  return Array.from(new Set([...namesFromSelectors, ...namesFromMenu])).filter(Boolean);
+}
+
+function suggestClosestItem(cfg: Config, rawName: string, topN = 2) {
+  const n = normStr(rawName);
+  const cands = candidateItems(cfg);
+  const scored = cands
+    .map((c) => ({ name: c, score: similarity(n, c) }))
+    .sort((a, b) => b.score - a.score);
+  return scored.slice(0, topN).filter((x) => x.score >= 0.45);
+}
+
+function resolveItemKey(
+  cfg: Config,
+  rawName: string,
+): { key: string | null; suggestion?: string[] } {
+  const n = normStr(rawName);
+  if (!n) return { key: null };
 
   const viaNorm = cfg.normalize?.items?.[n];
-  if (viaNorm && cfg.selectors[`item.${viaNorm}`]) return `item.${viaNorm}`;
-  if (cfg.selectors[`item.${n}`]) return `item.${n}`;
+  if (viaNorm && cfg.selectors[`item.${viaNorm}`]) return { key: `item.${viaNorm}` };
+  if (cfg.selectors[`item.${n}`]) return { key: `item.${n}` };
 
   const items = cfg.menu?.items;
   if (items?.length) {
     for (const it of items) {
-      const canon = it.name.toLowerCase();
+      const canon = normStr(it.name);
       const key = `item.${canon}`;
       if (!cfg.selectors[key]) continue;
-      if (canon === n) return key;
-      if (it.aliases?.some((a) => a.toLowerCase().trim() === n)) return key;
+      if (canon === n) return { key };
+      if (it.aliases?.some((a) => normStr(a) === n)) return { key };
     }
   }
 
-  const keys = Object.keys(cfg.selectors).filter((k) => k.startsWith("item."));
-  const hit = keys.find((k) => k.includes(n));
-  return hit ?? null;
+  const cand = suggestClosestItem(cfg, n);
+  if (cand.length) {
+    return { key: null, suggestion: cand.map((c) => c.name) };
+  }
+  return { key: null };
 }
 
 function normalizeOne(map: Record<string, string> | undefined, v?: string) {
   if (!v) return v;
-  const key = v.toLowerCase().trim();
+  const key = normStr(v);
   return map?.[key] ?? key;
+}
+
+function sel(cfg: Config, key: string) {
+  const s = cfg.selectors[key];
+  if (!s) throw new Error(`Missing selector for "${key}"`);
+  return s;
 }
 
 async function click(page: Page, selector: string) {
@@ -103,16 +155,24 @@ async function run(planPath: string, configPath: string) {
   console.log("[executor] Go to", cfg.baseUrl);
   await page.goto(cfg.baseUrl);
 
+  let missingItems: { asked: string; suggestions?: string[] }[] = [];
+
   for (const rawItem of plan.items) {
-    const itemKey = resolveItemKey(cfg, rawItem.name || "");
-    if (!itemKey) {
+    const resolved = resolveItemKey(cfg, rawItem.name || "");
+    if (!resolved.key) {
       console.log(
         `[executor] Could not find a button for "${rawItem.name}". Check config.normalize.items or menu.aliases.`,
       );
+      if (resolved.suggestion?.length) {
+        console.log(
+          `[suggest] NOT_FOUND: "${rawItem.name}" → did you mean: ${resolved.suggestion.join(", ")} ?`,
+        );
+      }
+      missingItems.push({ asked: rawItem.name || "", suggestions: resolved.suggestion });
       continue;
     }
 
-    const canonicalItem = itemKey.replace(/^item\./, "");
+    const canonicalItem = resolved.key.replace(/^item\./, "");
     const size = normalizeOne(cfg.normalize?.sizes, rawItem.size);
     const mods = (rawItem.modifiers ?? [])
       .map((m) => normalizeOne(cfg.normalize?.modifiers, m))
@@ -122,7 +182,7 @@ async function run(planPath: string, configPath: string) {
       `[executor] Add ${size ? size + " " : ""}${canonicalItem}${mods.length ? " (" + mods.join(", ") + ")" : ""}`,
     );
 
-    await click(page, sel(cfg, itemKey));
+    await click(page, sel(cfg, resolved.key));
 
     if (size) {
       const sizeKey = `size.${size}`;
@@ -175,17 +235,13 @@ async function run(planPath: string, configPath: string) {
   if (fields.time) await fill(page, sel(cfg, fields.time), timeVal);
 
   const verifySel = cfg.verification?.summarySelector;
+  let ok = true;
   if (verifySel) {
     const text = (await page.textContent(verifySel))?.toLowerCase() ?? "";
-    let ok = true;
-    for (const item of plan.items) {
-      const resolvedKey = resolveItemKey(cfg, item.name || "");
-      const n = resolvedKey ? resolvedKey.replace(/^item\./, "") : normalizeOne(cfg.normalize?.items, item.name) ?? "";
-      const s = normalizeOne(cfg.normalize?.sizes, item.size) ?? "";
-      const mods = (item.modifiers ?? [])
-        .map((m) => normalizeOne(cfg.normalize?.modifiers, m) ?? m.toLowerCase())
-        .filter((m): m is string => Boolean(m));
-
+    for (const it of plan.items) {
+      const n = normalizeOne(cfg.normalize?.items, it.name) ?? "";
+      const s = normalizeOne(cfg.normalize?.sizes, it.size) ?? "";
+      const ms = (it.modifiers ?? []).map((m) => normalizeOne(cfg.normalize?.modifiers, m) ?? m);
       if (n && !text.includes(n)) {
         console.log(`[verify] Missing item '${n}' in summary`);
         ok = false;
@@ -194,14 +250,31 @@ async function run(planPath: string, configPath: string) {
         console.log(`[verify] Missing size '${s}' in summary`);
         ok = false;
       }
-      for (const m of mods) {
+      for (const m of ms) {
         if (m && !text.includes(m)) {
           console.log(`[verify] Missing modifier '${m}' in summary`);
           ok = false;
         }
       }
     }
-    console.log(ok ? "✅ Verification passed" : "⚠️ Verification had mismatches");
+  }
+  if (missingItems.length) ok = false;
+
+  if (ok) {
+    console.log("[verify] RESULT: PASS");
+  } else {
+    console.log("[verify] RESULT: FAIL");
+    if (missingItems.length) {
+      for (const m of missingItems) {
+        if (m.suggestions?.length) {
+          console.log(
+            `[suggest] ITEM_NOT_FOUND: "${m.asked}" → suggestions: ${m.suggestions.join(", ")}`,
+          );
+        } else {
+          console.log(`[suggest] ITEM_NOT_FOUND: "${m.asked}" → suggestions: none`);
+        }
+      }
+    }
   }
 
   console.log("✅ Reached checkout (stopping before payment). Video saved in ./videos");
