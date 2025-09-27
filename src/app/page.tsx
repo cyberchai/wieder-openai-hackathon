@@ -75,7 +75,7 @@ export default function Home() {
     <main className={styles.container}>
       <section className={styles.panel}>
         <header className={styles.header}>
-          <h1 className={styles.title}>Wiedout</h1>
+          <h1 className={styles.title}>ASAP<i>ly</i></h1>
           <p className={styles.subtitle}>
             Authenticate with Google, describe a café order, and let GPT-5 craft a
             structured fulfillment plan in seconds.
