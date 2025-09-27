@@ -1,2 +1,3 @@
-2025/09/27-16:44:44.423 50a743 Creating DB /Users/chairaharder/Desktop/wieder-openai-hackathon/.chrome-profile/Default/shared_proto_db since it was missing.
-2025/09/27-16:44:44.427 50a743 Reusing MANIFEST /Users/chairaharder/Desktop/wieder-openai-hackathon/.chrome-profile/Default/shared_proto_db/MANIFEST-000001
+2025/09/27-16:58:10.013 51044c Reusing MANIFEST /Users/chairaharder/Desktop/wieder-openai-hackathon/.chrome-profile/Default/shared_proto_db/MANIFEST-000001
+2025/09/27-16:58:10.013 51044c Recovering log #3
+2025/09/27-16:58:10.014 51044c Reusing old log /Users/chairaharder/Desktop/wieder-openai-hackathon/.chrome-profile/Default/shared_proto_db/000003.log 

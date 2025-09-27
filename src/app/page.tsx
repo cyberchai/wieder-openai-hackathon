@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   auth,
@@ -76,8 +77,16 @@ export default function Home() {
         setFeedback(typeof data.error === "string" ? data.error : "Request failed.");
         return;
       }
-      setOut(data as OrderJSON);
+      const planData = data as OrderJSON;
+      setOut(planData);
       setFeedback("Plan generated successfully. Review the JSON below.");
+      fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan: planData, merchant: configKey }),
+      }).catch(() => {
+        // non-blocking log sync; ignore failure
+      });
     } catch {
       setFeedback("Unable to reach the planner. Try again.");
     } finally {
@@ -181,6 +190,10 @@ export default function Home() {
             <option value="b">ASAPly Demo Café B (Small/Medium/Large)</option>
           </select>
         </div>
+
+        <Link href="/orders" className={styles.secondaryButton}>
+          View orders
+        </Link>
 
         <form onSubmit={plan} className={styles.form}>
           <div className={styles.labelRow}>
