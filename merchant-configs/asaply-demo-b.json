@@ -1,11 +1,88 @@
 {
   "id": "asaply-demo-b",
   "name": "ASAPly Demo Café B",
-  "sizes": ["small", "medium", "large"],
-  "modifiers": ["oat milk", "almond milk", "whole milk", "double shot"],
-  "items": [
-    "iced matcha latte",
-    "cold brew",
-    "oat latte"
-  ]
+  "baseUrl": "http://localhost:3000/mock-cafe-b",
+  "selectors": {
+    "item.iced matcha latte": "[data-testid='sku-iced-matcha']",
+    "item.cold brew": "[data-testid='sku-cold-brew']",
+    "item.oat latte": "[data-testid='sku-oat-latte']",
+    "size.small": "[data-testid='opt-size-s']",
+    "size.medium": "[data-testid='opt-size-m']",
+    "size.large": "[data-testid='opt-size-l']",
+    "modifier.oat milk": "[data-testid='opt-milk-oat']",
+    "modifier.almond milk": "[data-testid='opt-milk-almond']",
+    "modifier.whole milk": "[data-testid='opt-milk-whole']",
+    "modifier.double shot": "[data-testid='opt-shot-double']",
+    "modifier.iced": "[data-testid='opt-iced']",
+    "modifier.brown sugar syrup": "[data-testid='opt-syrup-brown-sugar']",
+    "button.add": "[data-testid='btn-add']",
+    "button.viewCart": "[data-testid='btn-cart']",
+    "button.checkout": "[data-testid='btn-checkout']",
+    "field.name": "[data-testid='input-name']",
+    "field.phone": "[data-testid='input-phone']",
+    "field.time": "[data-testid='input-pickup']"
+  },
+  "normalize": {
+    "items": {
+      "matcha latte": "iced matcha latte",
+      "matcha latter": "iced matcha latte",
+      "iced matcha": "iced matcha latte",
+      "green tea latte": "iced matcha latte",
+      "cb": "cold brew",
+      "coldbrew": "cold brew",
+      "oatmilk": "oat latte"
+    },
+    "sizes": {
+      "tall": "small",
+      "grande": "medium",
+      "venti": "large",
+      "sm": "small",
+      "small": "small",
+      "md": "medium",
+      "medium": "medium",
+      "lg": "large",
+      "large": "large"
+    },
+    "modifiers": {
+      "oat": "oat milk",
+      "oatmilk": "oat milk",
+      "almond": "almond milk",
+      "whole": "whole milk",
+      "2x shots": "double shot",
+      "extra shot": "double shot",
+      "double": "double shot"
+    }
+  },
+  "availability": {},
+  "verification": {
+    "summarySelector": "[data-testid='cart-summary']"
+  },
+  "checkout": {
+    "defaults": {
+      "name": "Guest",
+      "phone": "555-0202",
+      "time": "12:30"
+    },
+    "fields": {
+      "name": "field.name",
+      "phone": "field.phone",
+      "time": "field.time"
+    }
+  },
+  "menu": {
+    "items": [
+      {
+        "name": "Iced Matcha Latte",
+        "aliases": ["matcha latte", "matcha latter", "iced matcha", "green tea latte"]
+      },
+      {
+        "name": "Cold Brew",
+        "aliases": ["coldbrew", "iced coffee", "cb"]
+      },
+      {
+        "name": "Oat Latte",
+        "aliases": ["oatmilk latte", "oatmilk"]
+      }
+    ]
+  }
 }

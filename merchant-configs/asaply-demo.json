@@ -1,11 +1,51 @@
 {
   "id": "asaply-demo-a",
   "name": "ASAPly Demo Café A",
-  "sizes": ["tall", "grande", "venti"],
-  "modifiers": ["oat milk", "almond milk", "whole milk", "2x shots"],
-  "items": [
-    "matcha latte",
-    "cold brew",
-    "oat latte"
-  ]
+  "baseUrl": "http://localhost:3000/mock-cafe",
+  "selectors": {
+    "item.matcha latte": "[data-testid='item-matcha-latte']",
+    "item.cold brew": "[data-testid='item-cold-brew']",
+    "item.oat latte": "[data-testid='item-oat-latte']",
+    "size.tall": "[data-testid='size-tall']",
+    "size.grande": "[data-testid='size-grande']",
+    "size.venti": "[data-testid='size-venti']",
+    "modifier.oat milk": "[data-testid='mod-oat-milk']",
+    "modifier.almond milk": "[data-testid='mod-almond-milk']",
+    "modifier.whole milk": "[data-testid='mod-whole-milk']",
+    "modifier.2x shots": "[data-testid='mod-2x-shots']",
+    "modifier.iced": "[data-testid='mod-iced']",
+    "modifier.brown sugar syrup": "[data-testid='mod-brown-sugar']",
+    "button.add": "[data-testid='add-to-cart']",
+    "button.viewCart": "[data-testid='view-cart']",
+    "button.checkout": "[data-testid='checkout']",
+    "field.name": "[data-testid='field-name']",
+    "field.phone": "[data-testid='field-phone']",
+    "field.time": "[data-testid='field-pickup-time']"
+  },
+  "normalize": {
+    "items": {},
+    "sizes": {},
+    "modifiers": {
+      "iced": "iced",
+      "brown sugar": "brown sugar syrup",
+      "brown sugar syrup": "brown sugar syrup",
+      "brwn sugar": "brown sugar syrup"
+    }
+  },
+  "availability": {},
+  "verification": {
+    "summarySelector": "[data-testid='order-summary']"
+  },
+  "checkout": {
+    "defaults": {
+      "name": "Guest",
+      "phone": "555-0101",
+      "time": "12:30"
+    },
+    "fields": {
+      "name": "field.name",
+      "phone": "field.phone",
+      "time": "field.time"
+    }
+  }
 }

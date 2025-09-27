@@ -63,6 +63,12 @@ export default function MockCafe() {
         <button data-testid="mod-2x-shots" onClick={() => toggleMod("2x shots")}>2x Shots</button>
       </div>
 
+      {/* Temperature / Syrups */}
+      <div className="space-x-2">
+        <button data-testid="mod-iced" onClick={() => toggleMod("iced")}>Iced</button>
+        <button data-testid="mod-brown-sugar" onClick={() => toggleMod("brown sugar syrup")}>Brown Sugar Syrup</button>
+      </div>
+
       {/* Actions */}
       <div className="space-x-2">
         <button data-testid="add-to-cart" onClick={addToCart}>Add to cart</button>
