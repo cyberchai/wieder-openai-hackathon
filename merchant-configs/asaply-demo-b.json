@@ -1,0 +1,11 @@
+{
+  "id": "asaply-demo-b",
+  "name": "ASAPly Demo Café B",
+  "sizes": ["small", "medium", "large"],
+  "modifiers": ["oat milk", "almond milk", "whole milk", "double shot"],
+  "items": [
+    "iced matcha latte",
+    "cold brew",
+    "oat latte"
+  ]
+}

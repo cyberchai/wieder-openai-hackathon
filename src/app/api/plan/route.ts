@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { adminAuth } from "@/src/lib/firebaseAdmin";
+import { requireUser } from "@/src/lib/authGuard";
 import { openai } from "@/src/lib/openai";
 import type { OrderJSON } from "@/src/types/order";
 
@@ -12,14 +12,14 @@ const systemPrompt = `Convert café orders into strict JSON with this schema:
 }
 Respond ONLY with valid JSON.`;
 
+type ResponsesOutput = { output_text?: string };
+
 export async function POST(req: Request) {
   try {
-    const authz = req.headers.get("authorization") || "";
-    const token = authz.startsWith("Bearer ") ? authz.slice(7) : null;
-    if (!token) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
-
-    const decoded = await adminAuth.verifyIdToken(token).catch(() => null);
-    if (!decoded) return NextResponse.json({ error: "Invalid token" }, { status: 401 });
+    const decoded = await requireUser(req);
+    if (!decoded) {
+      return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
+    }
 
     const { query } = await req.json();
     if (!query || typeof query !== "string") {
@@ -32,9 +32,15 @@ export async function POST(req: Request) {
         { role: "system", content: systemPrompt },
         { role: "user", content: query },
       ],
+      // response_format: { type: "json_object" },
     });
 
-    const json = JSON.parse((resp as any).output_text) as OrderJSON;
+    const text = (resp as ResponsesOutput).output_text;
+    if (!text) {
+      return NextResponse.json({ error: "Malformed OpenAI response" }, { status: 500 });
+    }
+
+    const json = JSON.parse(text) as OrderJSON;
     json._requestedBy = decoded.email || decoded.uid;
     return NextResponse.json(json);
   } catch (err) {

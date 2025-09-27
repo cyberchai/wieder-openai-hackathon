@@ -26,7 +26,7 @@ if (typeof window !== "undefined") {
       if (supported) {
         try {
           analytics = getAnalytics(app);
-        } catch (e) {
+        } catch {
           // ignore analytics failure (e.g., blocked by user or unavailable)
           analytics = null;
         }

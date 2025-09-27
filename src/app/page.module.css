@@ -8,7 +8,7 @@
 }
 
 .panel {
-  width: min(720px, 100%);
+  width: min(760px, 100%);
   display: flex;
   flex-direction: column;
   gap: 2.5rem;
@@ -42,7 +42,7 @@
   font-size: 1rem;
   color: rgba(17, 24, 39, 0.7);
   line-height: 1.6;
-  max-width: 38ch;
+  max-width: 46ch;
 }
 
 .authRow {
@@ -122,6 +122,33 @@
   transform: translateY(0);
 }
 
+.selectGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.selectLabel {
+  font-weight: 600;
+  color: #111827;
+}
+
+.select {
+  width: 100%;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  padding: 0.85rem 1rem;
+  font-size: 1rem;
+  background: rgba(255, 255, 255, 0.92);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.select:focus {
+  outline: none;
+  border-color: rgba(37, 99, 235, 0.45);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.18);
+}
+
 .form {
   display: flex;
   flex-direction: column;
@@ -163,7 +190,7 @@
 
 .submitButton {
   align-self: flex-end;
-  min-width: 140px;
+  min-width: 150px;
   padding: 0.85rem 1.8rem;
 }
 
@@ -225,6 +252,37 @@
   color: rgba(248, 250, 252, 0.55);
 }
 
+.runSection {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.runButton {
+  width: 100%;
+  justify-content: center;
+  padding: 0.85rem 1.8rem;
+}
+
+.runButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+.logs {
+  background: #111827;
+  color: #f9fafb;
+  padding: 1rem;
+  border-radius: 16px;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  max-height: 280px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
 .footerNote {
   font-size: 0.85rem;
   color: rgba(17, 24, 39, 0.55);
@@ -242,7 +300,8 @@
     justify-content: center;
   }
 
-  .submitButton {
+  .submitButton,
+  .runButton {
     align-self: stretch;
   }
 }
