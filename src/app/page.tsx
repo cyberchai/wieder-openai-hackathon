@@ -28,6 +28,8 @@ export default function Home() {
   const [out, setOut] = useState<OrderJSON | null>(null);
   const [busy, setBusy] = useState(false);
   const [configKey, setConfigKey] = useState<ConfigKey>("a");
+  const [merchantId, setMerchantId] = useState<string>("");
+  const [merchants, setMerchants] = useState<{ id: string; name: string }[]>([]);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [execLogs, setExecLogs] = useState<string>("");
   const [execNotice, setExecNotice] = useState<string | null>(null);
@@ -47,6 +49,19 @@ export default function Home() {
       setEmail(u.email);
       setToken(await u.getIdToken());
     });
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/merchants")
+      .then((res) => res.json())
+      .then((data) => {
+        setMerchants(data.merchants || []);
+        if (typeof window !== "undefined") {
+          const saved = localStorage.getItem("asaply.selectedMerchantId");
+          if (saved) setMerchantId(saved);
+        }
+      })
+      .catch(() => setMerchants([]));
   }, []);
 
   async function plan(e: React.FormEvent<HTMLFormElement>) {
@@ -106,13 +121,20 @@ export default function Home() {
     setExecNotice(null);
 
     try {
+      const payload: Record<string, unknown> = { plan: out };
+      if (merchantId) {
+        payload.merchantId = merchantId;
+      } else {
+        payload.configKey = configKey;
+      }
+
       const res = await fetch("/api/execute", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ plan: out, configKey }),
+        body: JSON.stringify(payload),
       });
       const data: ExecuteResponse = await res.json();
       if (!res.ok) {
@@ -127,8 +149,11 @@ export default function Home() {
         setExecNotice("Order verified and saved to history.");
         fetch("/api/orders", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ plan: out, merchant: configKey }),
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ plan: out, merchant: merchantId || configKey, status: "PASS" }),
         }).catch(() => {
           /* ignore logging errors */
         });
@@ -200,6 +225,36 @@ export default function Home() {
             <option value="a">ASAPly Demo Café A (Tall/Grande/Venti)</option>
             <option value="b">ASAPly Demo Café B (Small/Medium/Large)</option>
           </select>
+        </div>
+
+        <div className={styles.selectGroup}>
+          <label htmlFor="merchantSelect" className={styles.selectLabel}>
+            Firestore merchants
+          </label>
+          <select
+            id="merchantSelect"
+            className={styles.select}
+            value={merchantId}
+            onChange={(event) => {
+              const value = event.target.value;
+              setMerchantId(value);
+              if (value) {
+                localStorage.setItem("asaply.selectedMerchantId", value);
+              } else {
+                localStorage.removeItem("asaply.selectedMerchantId");
+              }
+            }}
+          >
+            <option value="">(Legacy) Demo A/B selector</option>
+            {merchants.map((merchant) => (
+              <option key={merchant.id} value={merchant.id}>
+                {merchant.name}
+              </option>
+            ))}
+          </select>
+          <Link className="underline text-sm" href="/merchant">
+            Manage merchants
+          </Link>
         </div>
 
         <Link href="/orders" className={styles.secondaryButton}>

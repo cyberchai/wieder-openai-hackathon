@@ -3,6 +3,7 @@ import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
 import { requireUser } from "@/src/lib/authGuard";
+import { getMerchant } from "@/src/lib/merchantsStore";
 
 function mapConfig(key: string) {
   const root = process.cwd();
@@ -18,14 +19,25 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { plan, configKey } = await req.json();
+    const { plan, configKey, merchantId } = await req.json();
     if (!plan) {
       return NextResponse.json({ error: "Missing plan" }, { status: 400 });
     }
 
-    const configPath = mapConfig(String(configKey ?? "a"));
-    if (!configPath) {
-      return NextResponse.json({ error: "Unknown configKey" }, { status: 400 });
+    let configPath: string | null = null;
+    if (merchantId) {
+      const cfg = await getMerchant(String(merchantId));
+      if (!cfg) {
+        return NextResponse.json({ error: "Unknown merchantId" }, { status: 400 });
+      }
+      const tmpPath = path.join(process.cwd(), ".run-config.json");
+      fs.writeFileSync(tmpPath, JSON.stringify(cfg, null, 2));
+      configPath = tmpPath;
+    } else {
+      configPath = mapConfig(String(configKey ?? "a"));
+      if (!configPath) {
+        return NextResponse.json({ error: "Unknown configKey" }, { status: 400 });
+      }
     }
 
     const planPath = path.join(process.cwd(), ".last-plan.json");
