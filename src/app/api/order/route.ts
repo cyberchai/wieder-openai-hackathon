@@ -23,6 +23,8 @@ interface OrderProcessingResponse {
     name: string;
     menu: any;
   };
+  needs_confirmation?: boolean;
+  questions?: string[];
 }
 
 // Tiny CSV parser for demo (no quotes/escapes). Good enough for short menus.
@@ -52,46 +54,124 @@ function parseMenuCSV(csv: string) {
   }).filter(x => !!x.name);
 }
 
-// Helper to call the model with compact prompt & retry on length
+// Enhanced system prompt for intelligent order matching
+const SYSTEM_PROMPT = `You are an intelligent order processing assistant. Convert user text into a JSON order with smart matching.
+
+ALWAYS return valid JSON with these exact fields:
+- items: array of items (can be empty)
+- fulfillment: object with type ("pickup" or "delivery") 
+- needs_confirmation: boolean
+- questions: array of strings (if needs_confirmation is true)
+
+SMART MATCHING RULES:
+1. Use fuzzy matching - "chai tea" matches "chai tea latte", "coffee" matches "americano", etc.
+2. Be generous with matches - if 80%+ of the words match, it's a good match
+3. Only ask for confirmation if you're genuinely uncertain (less than 70% match)
+4. For clear matches, set needs_confirmation: false and confidence: 0.9+
+5. Always include fulfillment with type "pickup"
+
+EXAMPLES:
+- "chai tea" → "chai tea latte" (needs_confirmation: false)
+- "matcha" → "matcha latte" (needs_confirmation: false) 
+- "cold brew" → "cold brew coffee" (needs_confirmation: false)
+- "something sweet" → needs_confirmation: true (too vague)
+
+Output ONLY valid JSON, no other text.
+
+Example output:
+{"items":[{"menu_item":"Chai Tea Latte","qty":1,"size":"Medium","confidence":0.95}],"fulfillment":{"type":"pickup"},"needs_confirmation":false,"questions":[]}`;
+
+// Simplified JSON Schema for order structure
+const ORDER_SCHEMA = {
+  "type": "object",
+  "properties": {
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "menu_item": { "type": "string" },
+          "qty": { "type": "integer", "minimum": 1 },
+          "size": { "type": "string" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+        },
+        "required": ["menu_item","qty"]
+      }
+    },
+    "fulfillment": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["pickup","delivery"] }
+      },
+      "required": ["type"]
+    },
+    "needs_confirmation": { "type": "boolean" },
+    "questions": { "type": "array", "items": { "type": "string" } }
+  },
+  "required": ["items","fulfillment","needs_confirmation"]
+};
+
+// Helper to call the model with the new Responses API
 async function completeOrderJSON({
-  systemPrompt,
-  userQuery,
-  maxTokens = 1200,
+  menu,
+  userText,
+  customerName = "",
+  customerPhone = "",
+  fulfillmentDefault = "pickup",
+  timeHint = "ASAP"
 }: {
-  systemPrompt: string;
-  userQuery: string;
-  maxTokens?: number;
+  menu: any;
+  userText: string;
+  customerName?: string;
+  customerPhone?: string;
+  fulfillmentDefault?: string;
+  timeHint?: string;
 }) {
-  const call = async (cap: number) => {
+  const userMsg = `Menu: ${JSON.stringify(menu)}
+
+User order: ${userText}
+
+Convert this to JSON order format.`;
+
+  try {
+    // Use the enhanced system with chat.completions API
     const res = await openai.chat.completions.create({
       model: "gpt-5",
       messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userQuery },
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: userMsg }
       ],
-      max_completion_tokens: cap,
-      response_format: { type: "json_object" } as any,
+      max_completion_tokens: 800,
+      response_format: { type: "json_object" } as any
     });
 
-    const choice = res.choices?.[0];
-    const content = choice?.message?.content ?? "";
-    const lengthCapped = choice?.finish_reason === "length";
-    return { content, lengthCapped };
-  };
-
-  let { content, lengthCapped } = await call(maxTokens);
-
-  // Retry once with a bigger cap and a compacting nudge
-  if ((!content || content.trim() === "") || lengthCapped) {
-    const compactUserQuery =
-      userQuery +
-      "\n\nReturn the JSON in one line with no spaces and the shortest possible strings.";
-    ({ content } = await call(Math.min(maxTokens * 2, 2400)));
-    if (!content || content.trim() === "") {
-      throw new Error("Model returned empty content after retry");
+    const content = res.choices?.[0]?.message?.content ?? "";
+    console.log("OpenAI response content:", content);
+    
+    // Check if response is empty or too short
+    if (!content || content.trim().length < 10) {
+      console.error("Empty or very short response from OpenAI, using fallback");
+      // Return a fallback response that asks for confirmation
+      return JSON.stringify({
+        items: [],
+        fulfillment: { type: "pickup" },
+        needs_confirmation: true,
+        questions: ["I didn't understand your order. Could you please specify what you'd like?"]
+      });
     }
+    
+    return content;
+  } catch (error) {
+    console.error("Error calling OpenAI API:", error);
+    // Return a fallback response instead of throwing
+    console.log("Using fallback response due to API error");
+    return JSON.stringify({
+      items: [],
+      fulfillment: { type: "pickup" },
+      needs_confirmation: true,
+      questions: ["I'm having trouble processing your order. Could you please try again?"]
+    });
   }
-  return content;
 }
 
 export async function POST(req: Request) {
@@ -130,62 +210,108 @@ export async function POST(req: Request) {
       merchantIdentifier = merchant.id || "transient:csv";
     }
 
-    // 2) Build compact menu payload (names + sizes + modifiers only)
-    const compactMenuItems = (merchant.menu?.items ?? []).map((i: any) => ({
-      n: i.name, s: i.sizes ?? [], m: i.modifiers ?? [],
-    }));
+    // 2) Build simplified menu structure
+    const enhancedMenu = {
+      venue: merchant.name,
+      items: (merchant.menu?.items ?? []).map((item: any) => ({
+        name: item.name,
+        sizes: item.sizes || ["Medium"],
+        modifiers: item.modifiers || []
+      }))
+    };
 
-    // 3) Compact system prompt
-    const systemPrompt = `You are an ASAPly order parser. Output STRICT JSON only.
-
-Schema:
-{"order":{"items":[{"n":"name","sz":"size|null","mods":["string"],"q":1}],
-"fulfillment":{"t":"pickup|delivery","time":"string|null"},
-"customer":{"n":"string","ph":"string|null"},
-"payment":{"t":"card_test|apple_pay_test|stripe_test"}},
-"suggestions":["string"],"clarifications":["string"]}
-
-Rules: match menu names; default sz to middle; replace/omit unknown modifiers and add clarification; defaults: pickup, Guest, card_test. No extra text.
-
-Merchant:${merchant.name}
-Menu:${JSON.stringify(compactMenuItems)}`;
-
-    // 4) Call model with retry logic
-    const userQuery = `User request: ${query}`;
-    const jsonText = await completeOrderJSON({ systemPrompt, userQuery });
+    // 3) Call model with enhanced system
+    const jsonText = await completeOrderJSON({
+      menu: enhancedMenu,
+      userText: query,
+      customerName: (decoded as any).email || "Guest",
+      customerPhone: "",
+      fulfillmentDefault: "pickup",
+      timeHint: "ASAP"
+    });
 
     let parsed: {
-      order: {
-        items: Array<{ n: string; sz?: string | null; mods?: string[]; q?: number }>;
-        fulfillment: { t: string; time?: string | null };
-        customer: { n: string; ph?: string | null };
-        payment: { t: string };
+      items: Array<{
+        menu_item: string;
+        qty: number;
+        size?: string;
+        modifiers?: string[];
+        notes?: string;
+        price?: number;
+        line_total?: number;
+      }>;
+      fulfillment: {
+        type: "pickup" | "delivery";
+        time?: string;
       };
-      suggestions?: string[];
-      clarifications?: string[];
+      customer?: {
+        name?: string;
+        phone?: string;
+      };
+      order_total?: number;
+      source?: {
+        venue?: string;
+        menu_version?: string;
+      };
+      needs_confirmation?: boolean;
+      questions?: string[];
     };
 
     try {
+      console.log("Attempting to parse JSON:", jsonText);
       parsed = JSON.parse(jsonText);
-    } catch {
-      return NextResponse.json({ error: "Invalid JSON from model" }, { status: 502 });
+      
+      // Validate required fields
+      if (!parsed.items || !Array.isArray(parsed.items)) {
+        console.error("Missing or invalid items array");
+        return NextResponse.json({ error: "Invalid response: missing items" }, { status: 502 });
+      }
+      
+      if (!parsed.fulfillment || !parsed.fulfillment.type) {
+        console.error("Missing or invalid fulfillment object");
+        return NextResponse.json({ error: "Invalid response: missing fulfillment" }, { status: 502 });
+      }
+      
+      if (typeof parsed.needs_confirmation !== "boolean") {
+        console.error("Missing or invalid needs_confirmation field");
+        return NextResponse.json({ error: "Invalid response: missing needs_confirmation" }, { status: 502 });
+      }
+      
+      // Validate items have required fields
+      for (const item of parsed.items) {
+        if (!item.menu_item || !item.qty) {
+          console.error("Item missing required fields:", item);
+          return NextResponse.json({ error: "Invalid response: item missing menu_item or qty" }, { status: 502 });
+        }
+      }
+      
+    } catch (error) {
+      console.error("JSON parsing error:", error);
+      console.error("Raw response that failed to parse:", jsonText);
+      return NextResponse.json({ 
+        error: "Invalid JSON from model", 
+        debug: { 
+          rawResponse: jsonText,
+          responseLength: jsonText?.length || 0
+        }
+      }, { status: 502 });
     }
 
-    // 5) Map compact keys back to OrderJSON shape
+    // 4) Map new structure to OrderJSON shape
     const mappedOrder: OrderJSON = {
-      items: parsed.order.items.map(item => ({
-        name: item.n,
-        size: item.sz || undefined,
-        modifiers: item.mods || [],
-        qty: item.q || 1,
+      items: parsed.items.map(item => ({
+        name: item.menu_item,
+        size: item.size || undefined,
+        modifiers: [],
+        qty: item.qty || 1,
       })),
       fulfillment: {
-        type: parsed.order.fulfillment.t as "pickup" | "delivery",
-        time: parsed.order.fulfillment.time || "",
+        type: parsed.fulfillment.type,
+        time: "",
       },
       customer: {
-        name: parsed.order.customer.n,
-        phone: parsed.order.customer.ph || "",
+        name: "Guest",
+        phone: "",
       },
       payment: {
         type: "card_test",
@@ -197,9 +323,11 @@ Menu:${JSON.stringify(compactMenuItems)}`;
 
     const result: OrderProcessingResponse = {
       order: mappedOrder,
-      suggestions: parsed.suggestions ?? [],
-      clarifications: parsed.clarifications ?? [],
+      suggestions: [], // New system doesn't provide suggestions in the same format
+      clarifications: [], // New system doesn't provide clarifications in the same format
       merchant: { id: merchantIdentifier, name: merchant.name, menu: merchant.menu },
+      needs_confirmation: parsed.needs_confirmation || false,
+      questions: parsed.questions || [],
     };
 
     return NextResponse.json(result, { status: 200 });

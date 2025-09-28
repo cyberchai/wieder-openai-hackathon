@@ -189,19 +189,49 @@ export default function PaymentPage() {
 
   const { order, merchant } = orderData;
   const totalItems = order.items.reduce((sum, item) => sum + (item.qty || 1), 0);
-  const estimatedTotal = totalItems * 4.99; // Mock pricing
+  
+  // Calculate total from order data or show "Price TBD" if no pricing available
+  const calculateTotal = () => {
+    // Check if we have pricing data in the order
+    const hasPricing = order.items.some(item => item.price || item.line_total);
+    
+    if (hasPricing) {
+      return order.items.reduce((sum, item) => {
+        return sum + (item.line_total || (item.price || 0) * (item.qty || 1));
+      }, 0);
+    }
+    
+    return null; // No pricing available
+  };
+  
+  const orderTotal = calculateTotal();
+  const showPriceTBD = orderTotal === null;
 
   return (
     <main className="app-shell">
       <section className="card">
         <div className="card-header-row">
           <div className="card-header">
-            <span className="app-logo" aria-hidden="true">
-              <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M4 21v-2h16v2H4Zm4-4q-1.65 0-2.825-1.175T4 13V3h16q.825 0 1.413.588T22 5v3q0 .825-.588 1.413T20 10h-2v3q0 1.65-1.175 2.825T14 17H8Zm10-9h2V5h-2v3ZM8 15h6q.825 0 1.413-.588T16 13V5h-6v.4l1.8 1.45q.05.05.2.4v4.25q0 .2-.15.35t-.35.15h-4q-.2 0-.35-.15T7 11.5V7.25q0-.05.2-.4L9 5.4V5H6v8q0 .825.588 1.413T8 15Zm3-5ZM9 5h1h-1Z" />
-              </svg>
-            </span>
-            <header className="app-header">Payment</header>
+            <button 
+              type="button"
+              onClick={() => window.location.href = '/'}
+              style={{ 
+                display: "flex", 
+                alignItems: "center", 
+                gap: "12px", 
+                background: "none", 
+                border: "none", 
+                cursor: "pointer",
+                padding: 0
+              }}
+            >
+              <span className="app-logo" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M4 21v-2h16v2H4Zm4-4q-1.65 0-2.825-1.175T4 13V3h16q.825 0 1.413.588T22 5v3q0 .825-.588 1.413T20 10h-2v3q0 1.65-1.175 2.825T14 17H8Zm10-9h2V5h-2v3ZM8 15h6q.825 0 1.413-.588T16 13V5h-6v.4l1.8 1.45q.05.05.2.4v4.25q0 .2-.15.35t-.35.15h-4q-.2 0-.35-.15T7 11.5V7.25q0-.05.2-.4L9 5.4V5H6v8q0 .825.588 1.413T8 15Zm3-5ZM9 5h1h-1Z" />
+                </svg>
+              </span>
+              <header className="app-header">Payment</header>
+            </button>
           </div>
           <div className="card-header-chip" ref={menuRef}>
             <button type="button" className="chip" onClick={() => setMenuOpen((open) => !open)}>
@@ -239,9 +269,22 @@ export default function PaymentPage() {
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span style={{ fontSize: "18px", fontWeight: "600", color: "#111827" }}>Total</span>
-              <span style={{ fontSize: "20px", fontWeight: "700", color: "#111827" }}>
-                ${estimatedTotal.toFixed(2)}
-              </span>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+                {showPriceTBD ? (
+                  <>
+                    <span style={{ fontSize: "20px", fontWeight: "700", color: "#111827" }}>
+                      Price TBD
+                    </span>
+                    <span style={{ fontSize: "12px", color: "#6b7280", marginTop: "2px" }}>
+                      at pickup
+                    </span>
+                  </>
+                ) : (
+                  <span style={{ fontSize: "20px", fontWeight: "700", color: "#111827" }}>
+                    ${orderTotal.toFixed(2)}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
@@ -405,7 +448,7 @@ export default function PaymentPage() {
                 opacity: processing ? 0.5 : 1
               }}
             >
-              {processing ? "Processing..." : `Pay $${estimatedTotal.toFixed(2)}`}
+              {processing ? "Processing..." : showPriceTBD ? "Place Order (Price TBD)" : `Pay $${orderTotal.toFixed(2)}`}
             </button>
           </div>
 
