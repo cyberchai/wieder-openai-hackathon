@@ -34,9 +34,15 @@ export default function Home() {
   const [q, setQ] = useState("");
   const [isWorking, setIsWorking] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
-  const [promptPlaceholder, setPromptPlaceholder] = useState(
+  const placeholderSuggestions = [
     "Large oat latte + chocolate croissant at 12:30 pickup",
-  );
+    "Double Americano 8oz",
+    "Hot matcha latte with brown sugar syrup",
+    "Iced mocha latte no cold foam"
+  ];
+  
+  const [promptPlaceholder, setPromptPlaceholder] = useState(placeholderSuggestions[0]);
+  const [isTyping, setIsTyping] = useState(false);
   const [cloudMerchants, setCloudMerchants] = useState<{ id: string; name: string }[]>([]);
   const [selectedMerchant, setSelectedMerchant] = useState<string>(LEGACY_MERCHANTS[0].id);
   const [searchTerm, setSearchTerm] = useState("");
@@ -47,6 +53,9 @@ export default function Home() {
   const menuRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const comboRef = useRef<HTMLInputElement | null>(null);
+  const placeholderIndexRef = useRef(0);
+  const currentTextRef = useRef(placeholderSuggestions[0]);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const mergedMerchants = useMemo(
     () => [
@@ -185,6 +194,45 @@ export default function Home() {
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [listOpen]);
+
+  // Simple placeholder rotation (let's start with this to test)
+  useEffect(() => {
+    const rotatePlaceholder = () => {
+      console.log('rotatePlaceholder called', { q: q.trim(), isTyping });
+      // Only rotate if user is not actively typing (input is empty)
+      if (!q.trim()) {
+        const nextIndex = (placeholderIndexRef.current + 1) % placeholderSuggestions.length;
+        const nextText = placeholderSuggestions[nextIndex];
+        console.log('Rotating to:', nextText);
+        setPromptPlaceholder(nextText);
+        placeholderIndexRef.current = nextIndex;
+      }
+    };
+    
+    const interval = setInterval(rotatePlaceholder, 3000); // 3 seconds
+    
+    return () => {
+      clearInterval(interval);
+    };
+  }, [q, placeholderSuggestions]);
+
+  // Blinking cursor effect when not typing (disabled for now)
+  // useEffect(() => {
+  //   if (!isTyping && !q.trim()) {
+  //     let showCursor = true;
+      
+  //     const blinkCursor = () => {
+  //       const textWithoutCursor = promptPlaceholder.replace('|', '');
+  //       const newText = showCursor ? textWithoutCursor + '|' : textWithoutCursor;
+  //       setPromptPlaceholder(newText);
+  //       showCursor = !showCursor;
+  //     };
+      
+  //     const interval = setInterval(blinkCursor, 500); // Blink every 500ms
+      
+  //     return () => clearInterval(interval);
+  //   }
+  // }, [isTyping, q, promptPlaceholder]);
 
   const handlePromptSubmit = async () => {
     if (isWorking) return;

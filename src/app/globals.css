@@ -153,7 +153,7 @@ a {
   border: 1px solid #6b7280;
   border-radius: 999px;
   padding: 2px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.8);
   box-shadow: 0 8px 16px rgba(15, 23, 42, 0.14);
   display: inline-flex;
   align-items: center;
@@ -313,7 +313,8 @@ a {
 }
 
 .chip-menu button:hover {
-  background: #f5f7fb;
+  /* background: #f5f7fb; */
+  background: rgba(255, 255, 255, 0.8);
 }
 
 .manage-card {
@@ -446,4 +447,15 @@ a {
     height: 44px;
     width: 44px;
   }
+}
+
+/* Typing cursor animation for placeholder */
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.typing-cursor {
+  animation: blink 1s infinite;
+  color: #6b7280;
 }

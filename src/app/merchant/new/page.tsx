@@ -26,16 +26,18 @@ export default function NewMerchant() {
   const [itemsText, setItemsText] = useState("Matcha Latte\nCold Brew\nOat Latte");
   const [sizesText, setSizesText] = useState("Tall\nGrande\nVenti");
   const [modsText, setModsText] = useState("Oat Milk\nAlmond Milk\nWhole Milk\n2x Shots");
+  const [pricesText, setPricesText] = useState("$4.50\n$5.00\n$5.50");
   const [msg, setMsg] = useState("");
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [csvUrl, setCsvUrl] = useState("");
   const [csvCols, setCsvCols] = useState<string[]>([]);
-  const [colMap, setColMap] = useState<{ name?: string; size?: string; modifier?: string }>({});
+  const [colMap, setColMap] = useState<{ name?: string; size?: string; modifier?: string; price?: string }>({});
   const [csvRows, setCsvRows] = useState<Record<string, unknown>[]>([]);
-  const [csvPreview, setCsvPreview] = useState<{ items: string[]; sizes: string[]; modifiers: string[] }>({
+  const [csvPreview, setCsvPreview] = useState<{ items: string[]; sizes: string[]; modifiers: string[]; prices: string[] }>({
     items: [],
     sizes: [],
     modifiers: [],
+    prices: [],
   });
   const [activeTab, setActiveTab] = useState<'file' | 'url'>('file');
 
@@ -172,6 +174,7 @@ export default function NewMerchant() {
     const itemNames: string[] = [];
     const sizeValues: string[] = [];
     const modifierValues: string[] = [];
+    const priceValues: string[] = [];
 
     for (const row of csvRows) {
       const nameValue = String(row[colMap.name] ?? "").trim();
@@ -187,13 +190,21 @@ export default function NewMerchant() {
         const mods = splitMulti(String(row[colMap.modifier] ?? ""));
         modifierValues.push(...mods);
       }
+
+      if (colMap.price) {
+        const priceValue = String(row[colMap.price] ?? "").trim();
+        if (priceValue) {
+          priceValues.push(priceValue);
+        }
+      }
     }
 
     const items = uniq(itemNames);
     const sizes = uniq(sizeValues);
     const modifiers = uniq(modifierValues);
+    const prices = uniq(priceValues);
 
-    setCsvPreview({ items, sizes, modifiers });
+    setCsvPreview({ items, sizes, modifiers, prices });
     setMsg(`Parsed CSV with ${items.length} items.`);
   }
 
@@ -206,19 +217,23 @@ export default function NewMerchant() {
     const existingItems = itemsText.split("\n").map((s) => s.trim()).filter(Boolean);
     const existingSizes = sizesText.split("\n").map((s) => s.trim()).filter(Boolean);
     const existingMods = modsText.split("\n").map((s) => s.trim()).filter(Boolean);
+    const existingPrices = pricesText.split("\n").map((s) => s.trim()).filter(Boolean);
 
     const mergedItems = uniq([...existingItems, ...csvPreview.items]);
     const mergedSizes = uniq([...existingSizes, ...csvPreview.sizes]);
     const mergedModifiers = uniq([...existingMods, ...csvPreview.modifiers]);
+    const mergedPrices = uniq([...existingPrices, ...csvPreview.prices]);
 
     setItemsText(mergedItems.join("\n"));
     if (mergedSizes.length) setSizesText(mergedSizes.join("\n"));
     if (mergedModifiers.length) setModsText(mergedModifiers.join("\n"));
+    if (mergedPrices.length) setPricesText(mergedPrices.join("\n"));
 
     setMsg(
       `Imported ${csvPreview.items.length} items` +
         (csvPreview.sizes.length ? `, ${csvPreview.sizes.length} sizes` : "") +
-        (csvPreview.modifiers.length ? `, ${csvPreview.modifiers.length} modifiers` : ""),
+        (csvPreview.modifiers.length ? `, ${csvPreview.modifiers.length} modifiers` : "") +
+        (csvPreview.prices.length ? `, ${csvPreview.prices.length} prices` : ""),
     );
   }
 
@@ -336,13 +351,13 @@ export default function NewMerchant() {
                   <label htmlFor="merchant-name" style={{ display: "block", marginBottom: "12px", fontSize: "16px", fontWeight: "600", color: "#374151" }}>
                     Merchant Name
                   </label>
-                  <input
+        <input
                     id="merchant-name"
                     name="merchant-name"
                     type="text"
                     placeholder="Enter merchant name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
                     style={{
                       width: "100%",
                       padding: "16px 24px",
@@ -359,13 +374,13 @@ export default function NewMerchant() {
                   <label htmlFor="base-url" style={{ display: "block", marginBottom: "12px", fontSize: "16px", fontWeight: "600", color: "#374151" }}>
                     Base URL
                   </label>
-                  <input
+        <input
                     id="base-url"
                     name="base-url"
                     type="text"
                     placeholder="http://localhost:3000/mock-cafe"
-                    value={baseUrl}
-                    onChange={(e) => setBaseUrl(e.target.value)}
+          value={baseUrl}
+          onChange={(e) => setBaseUrl(e.target.value)}
                     style={{
                       width: "100%",
                       padding: "16px 24px",
@@ -395,10 +410,11 @@ export default function NewMerchant() {
               <p style={{ fontSize: "16px", color: "#6b7280", marginBottom: "32px", lineHeight: "1.6" }}>
                 CSV columns supported: <code style={{ backgroundColor: "#e5e7eb", padding: "4px 8px", borderRadius: "4px", fontSize: "14px" }}>name</code> (required), 
                 <code style={{ backgroundColor: "#e5e7eb", padding: "4px 8px", borderRadius: "4px", fontSize: "14px" }}>size</code> (optional), 
-                <code style={{ backgroundColor: "#e5e7eb", padding: "4px 8px", borderRadius: "4px", fontSize: "14px" }}>modifier</code> (optional).
+                <code style={{ backgroundColor: "#e5e7eb", padding: "4px 8px", borderRadius: "4px", fontSize: "14px" }}>modifier</code> (optional), 
+                <code style={{ backgroundColor: "#e5e7eb", padding: "4px 8px", borderRadius: "4px", fontSize: "14px" }}>price</code> (optional).
                 <br />
-                Sizes/modifiers can be separated by comma, semicolon, or pipe. Google Sheets: Publish to the web → CSV.
-              </p>
+            Sizes/modifiers can be separated by comma, semicolon, or pipe. Google Sheets: Publish to the web → CSV.
+          </p>
               
               {/* Tab Slider */}
               <div style={{ marginBottom: "32px" }}>
@@ -466,7 +482,7 @@ export default function NewMerchant() {
 
                 {/* Tab Content */}
                 {activeTab === 'file' && (
-                  <div>
+            <div>
                     <label htmlFor="csv-file" style={{ display: "block", marginBottom: "12px", fontSize: "16px", fontWeight: "600", color: "#374151" }}>
                       Upload CSV file
                     </label>
@@ -512,21 +528,21 @@ export default function NewMerchant() {
                         </span>
                       </div>
                     </div>
-                  </div>
+            </div>
                 )}
 
                 {activeTab === 'url' && (
-                  <div>
+            <div>
                     <label htmlFor="csv-url" style={{ display: "block", marginBottom: "12px", fontSize: "16px", fontWeight: "600", color: "#374151" }}>
                       CSV URL (Google Sheets "Publish to web" CSV)
                     </label>
-                    <input
+              <input
                       id="csv-url"
                       name="csv-url"
                       type="text"
-                      placeholder="https://docs.google.com/.../export?format=csv"
+                placeholder="https://docs.google.com/.../export?format=csv"
                       value={csvUrl || ""}
-                      onChange={(event) => setCsvUrl(event.target.value)}
+                onChange={(event) => setCsvUrl(event.target.value)}
                       style={{
                         width: "100%",
                         padding: "16px 24px",
@@ -537,24 +553,24 @@ export default function NewMerchant() {
                         outline: "none",
                         backgroundColor: "#fff"
                       }}
-                    />
-                  </div>
+              />
+            </div>
                 )}
-              </div>
+          </div>
 
-              {csvCols.length > 0 && (
+          {csvCols.length > 0 && (
                 <div style={{ marginBottom: "32px" }}>
                   <h3 style={{ fontSize: "20px", fontWeight: "600", marginBottom: "24px", color: "#111827" }}>Column Mapping</h3>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "24px" }}>
-                    <div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "24px" }}>
+              <div>
                       <label htmlFor="col-name" style={{ display: "block", marginBottom: "12px", fontSize: "16px", fontWeight: "600", color: "#374151" }}>
                         Item name column
                       </label>
-                      <select
+                <select
                         id="col-name"
                         name="col-name"
-                        value={colMap.name || ""}
-                        onChange={(event) => setColMap({ ...colMap, name: event.target.value || undefined })}
+                  value={colMap.name || ""}
+                  onChange={(event) => setColMap({ ...colMap, name: event.target.value || undefined })}
                         style={{
                           width: "100%",
                           padding: "16px",
@@ -564,22 +580,22 @@ export default function NewMerchant() {
                           outline: "none",
                           backgroundColor: "#fff"
                         }}
-                      >
-                        <option value="">-- Select --</option>
-                        {csvCols.map((col) => (
+                >
+                  <option value="">-- Select --</option>
+                  {csvCols.map((col) => (
                           <option key={col} value={col}>{col}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
+                  ))}
+                </select>
+              </div>
+              <div>
                       <label htmlFor="col-size" style={{ display: "block", marginBottom: "12px", fontSize: "16px", fontWeight: "600", color: "#374151" }}>
                         Size column (optional)
                       </label>
-                      <select
+                <select
                         id="col-size"
                         name="col-size"
-                        value={colMap.size || ""}
-                        onChange={(event) => setColMap({ ...colMap, size: event.target.value || undefined })}
+                  value={colMap.size || ""}
+                  onChange={(event) => setColMap({ ...colMap, size: event.target.value || undefined })}
                         style={{
                           width: "100%",
                           padding: "16px",
@@ -589,22 +605,47 @@ export default function NewMerchant() {
                           outline: "none",
                           backgroundColor: "#fff"
                         }}
-                      >
-                        <option value="">-- None --</option>
-                        {csvCols.map((col) => (
+                >
+                  <option value="">-- None --</option>
+                  {csvCols.map((col) => (
                           <option key={col} value={col}>{col}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
+                  ))}
+                </select>
+              </div>
+              <div>
                       <label htmlFor="col-modifier" style={{ display: "block", marginBottom: "12px", fontSize: "16px", fontWeight: "600", color: "#374151" }}>
                         Modifier column (optional)
                       </label>
-                      <select
+                <select
                         id="col-modifier"
                         name="col-modifier"
-                        value={colMap.modifier || ""}
-                        onChange={(event) => setColMap({ ...colMap, modifier: event.target.value || undefined })}
+                  value={colMap.modifier || ""}
+                  onChange={(event) => setColMap({ ...colMap, modifier: event.target.value || undefined })}
+                        style={{
+                          width: "100%",
+                          padding: "16px",
+                          fontSize: "16px",
+                          border: "2px solid #000",
+                          borderRadius: "12px",
+                          outline: "none",
+                          backgroundColor: "#fff"
+                        }}
+                >
+                  <option value="">-- None --</option>
+                  {csvCols.map((col) => (
+                          <option key={col} value={col}>{col}</option>
+                  ))}
+                </select>
+                    </div>
+                    <div>
+                      <label htmlFor="col-price" style={{ display: "block", marginBottom: "12px", fontSize: "16px", fontWeight: "600", color: "#374151" }}>
+                        Price column (optional)
+                      </label>
+                      <select
+                        id="col-price"
+                        name="col-price"
+                        value={colMap.price || ""}
+                        onChange={(event) => setColMap({ ...colMap, price: event.target.value || undefined })}
                         style={{
                           width: "100%",
                           padding: "16px",
@@ -621,9 +662,9 @@ export default function NewMerchant() {
                         ))}
                       </select>
                     </div>
-                  </div>
-                </div>
-              )}
+              </div>
+            </div>
+          )}
 
               <div style={{ display: "flex", justifyContent: "center", gap: "24px", marginBottom: "24px" }}>
                 <button 
@@ -640,8 +681,8 @@ export default function NewMerchant() {
                     cursor: "pointer"
                   }}
                 >
-                  Detect Columns
-                </button>
+              Detect Columns
+            </button>
                 <button 
                   type="button" 
                   onClick={handleParseCsv}
@@ -656,8 +697,8 @@ export default function NewMerchant() {
                     cursor: "pointer"
                   }}
                 >
-                  Parse CSV
-                </button>
+              Parse CSV
+            </button>
                 <button 
                   type="button" 
                   onClick={applyCsvToForm} 
@@ -674,11 +715,11 @@ export default function NewMerchant() {
                     opacity: csvPreview.items.length ? 1 : 0.5
                   }}
                 >
-                  Apply to form
-                </button>
-              </div>
+              Apply to form
+            </button>
+          </div>
 
-              {!!csvRows.length && (
+          {!!csvRows.length && (
                 <div style={{ 
                   backgroundColor: "#fff", 
                   padding: "24px", 
@@ -690,7 +731,8 @@ export default function NewMerchant() {
                     <p style={{ marginBottom: "8px" }}><strong>Parsed rows:</strong> {csvRows.length}</p>
                     <p style={{ marginBottom: "8px" }}><strong>Preview items:</strong> <span style={{ color: "#6b7280" }}>{csvPreview.items.slice(0, 8).join(", ")}{csvPreview.items.length > 8 ? " ..." : ""}</span></p>
                     <p style={{ marginBottom: "8px" }}><strong>Preview sizes:</strong> <span style={{ color: "#6b7280" }}>{csvPreview.sizes.slice(0, 8).join(", ")}{csvPreview.sizes.length > 8 ? " ..." : ""}</span></p>
-                    <p><strong>Preview modifiers:</strong> <span style={{ color: "#6b7280" }}>{csvPreview.modifiers.slice(0, 12).join(", ")}{csvPreview.modifiers.length > 12 ? " ..." : ""}</span></p>
+                    <p style={{ marginBottom: "8px" }}><strong>Preview modifiers:</strong> <span style={{ color: "#6b7280" }}>{csvPreview.modifiers.slice(0, 12).join(", ")}{csvPreview.modifiers.length > 12 ? " ..." : ""}</span></p>
+                    <p><strong>Preview prices:</strong> <span style={{ color: "#6b7280" }}>{csvPreview.prices.slice(0, 8).join(", ")}{csvPreview.prices.length > 8 ? " ..." : ""}</span></p>
                   </div>
                 </div>
               )}
@@ -709,14 +751,14 @@ export default function NewMerchant() {
               </h3>
               
               <div style={{ display: "flex", flexDirection: "column", gap: "32px" }}>
-                <div>
+          <div>
                   <label htmlFor="items-text" style={{ display: "block", marginBottom: "12px", fontSize: "16px", fontWeight: "600", color: "#374151" }}>
                     Items
                   </label>
-                  <textarea
+            <textarea
                     id="items-text"
                     name="items-text"
-                    value={itemsText}
+              value={itemsText}
                     onChange={(e) => {
                       setItemsText(e.target.value);
                       e.target.style.height = 'auto';
@@ -742,16 +784,16 @@ export default function NewMerchant() {
                       minHeight: "140px",
                       maxHeight: "400px"
                     }}
-                  />
-                </div>
-                <div>
+            />
+          </div>
+          <div>
                   <label htmlFor="sizes-text" style={{ display: "block", marginBottom: "12px", fontSize: "16px", fontWeight: "600", color: "#374151" }}>
                     Sizes
                   </label>
-                  <textarea
+            <textarea
                     id="sizes-text"
                     name="sizes-text"
-                    value={sizesText}
+              value={sizesText}
                     onChange={(e) => {
                       setSizesText(e.target.value);
                       e.target.style.height = 'auto';
@@ -777,16 +819,16 @@ export default function NewMerchant() {
                       minHeight: "140px",
                       maxHeight: "400px"
                     }}
-                  />
-                </div>
-                <div>
+            />
+          </div>
+          <div>
                   <label htmlFor="modifiers-text" style={{ display: "block", marginBottom: "12px", fontSize: "16px", fontWeight: "600", color: "#374151" }}>
                     Modifiers
                   </label>
-                  <textarea
+            <textarea
                     id="modifiers-text"
                     name="modifiers-text"
-                    value={modsText}
+              value={modsText}
                     onChange={(e) => {
                       setModsText(e.target.value);
                       e.target.style.height = 'auto';
@@ -812,9 +854,44 @@ export default function NewMerchant() {
                       minHeight: "140px",
                       maxHeight: "400px"
                     }}
-                  />
-                </div>
-              </div>
+            />
+          </div>
+          <div>
+                  <label htmlFor="prices-text" style={{ display: "block", marginBottom: "12px", fontSize: "16px", fontWeight: "600", color: "#374151" }}>
+                    Prices
+                  </label>
+            <textarea
+                    id="prices-text"
+                    name="prices-text"
+              value={pricesText}
+                    onChange={(e) => {
+                      setPricesText(e.target.value);
+                      e.target.style.height = 'auto';
+                      const newHeight = Math.min(e.target.scrollHeight, 400);
+                      e.target.style.height = newHeight + 'px';
+                      // Decrease border radius when content expands beyond original height
+                      if (newHeight > 140) {
+                        e.target.style.borderRadius = "16px";
+                      } else {
+                        e.target.style.borderRadius = "999px";
+                      }
+                    }}
+                    style={{
+                      width: "100%",
+                      padding: "16px 24px",
+                      fontSize: "16px",
+                      fontWeight: "600",
+                      border: "2px solid #000",
+                      borderRadius: "999px",
+                      outline: "none",
+                      backgroundColor: "#fff",
+                      resize: "none",
+                      minHeight: "140px",
+                      maxHeight: "400px"
+                    }}
+            />
+          </div>
+        </div>
             </div>
 
             {/* Submit Button */}
@@ -851,7 +928,7 @@ export default function NewMerchant() {
                 </div>
               </div>
             )}
-          </form>
+      </form>
         </div>
       </section>
     </main>
