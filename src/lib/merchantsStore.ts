@@ -4,9 +4,12 @@ import type { MerchantConfig } from "@/src/types/merchant";
 const MERCHANTS = "merchantConfigs";
 const ORDERS = "orders";
 
-export async function listMerchants(): Promise<{ id: string; name: string }[]> {
+export async function listMerchants(): Promise<MerchantConfig[]> {
   const snap = await adminDb.collection(MERCHANTS).orderBy("name").get();
-  return snap.docs.map((d) => ({ id: d.id, name: (d.data().name as string) || d.id }));
+  return snap.docs.map((d) => {
+    const data = d.data() as MerchantConfig;
+    return { id: d.id, ...data };
+  });
 }
 
 export async function getMerchant(id: string): Promise<MerchantConfig | null> {

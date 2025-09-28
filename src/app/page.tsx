@@ -14,12 +14,6 @@ const STORAGE_KEY = "asaply.selectedMerchant";
 
 type ConfigKey = "a" | "b";
 
-type ExecuteResponse = {
-  ok?: boolean;
-  exitCode?: number;
-  logs?: string;
-  error?: string;
-};
 
 const LEGACY_MERCHANTS = [
   { id: "legacy:a", name: "ASAPly Demo Café A (Tall/Grande/Venti)" },
@@ -37,19 +31,22 @@ function normalizeSelection(saved: string | null, cloud: { id: string }[]): stri
 export default function Home() {
   const [email, setEmail] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
-  const [q, setQ] = useState("Large oat latte + chocolate croissant at 12:30 pickup");
+  const [q, setQ] = useState("");
   const [isWorking, setIsWorking] = useState(false);
+  const [isThinking, setIsThinking] = useState(false);
   const [promptPlaceholder, setPromptPlaceholder] = useState(
     "Large oat latte + chocolate croissant at 12:30 pickup",
   );
   const [cloudMerchants, setCloudMerchants] = useState<{ id: string; name: string }[]>([]);
   const [selectedMerchant, setSelectedMerchant] = useState<string>(LEGACY_MERCHANTS[0].id);
-  const [searchTerm, setSearchTerm] = useState(LEGACY_MERCHANTS[0].name);
+  const [searchTerm, setSearchTerm] = useState("");
   const [listOpen, setListOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const comboRef = useRef<HTMLInputElement | null>(null);
 
   const mergedMerchants = useMemo(
     () => [
@@ -120,10 +117,6 @@ export default function Home() {
     }
   }, [mergedMerchants, selectedMerchant]);
 
-  useEffect(() => {
-    const match = mergedMerchants.find((merchant) => merchant.id === selectedMerchant);
-    if (match) setSearchTerm(match.name);
-  }, [mergedMerchants, selectedMerchant]);
 
   useEffect(() => {
     if (!listOpen) return;
@@ -151,6 +144,48 @@ export default function Home() {
     };
   }, [menuOpen]);
 
+  // Auto-focus input on page load
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, []);
+
+  // Add keyboard shortcuts for Cmd+F / Ctrl+F to focus input and Cmd+E / Ctrl+E to focus combo
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Handle Escape key to close combo menu
+      if (event.key === 'Escape') {
+        if (listOpen) {
+          setListOpen(false);
+          if (comboRef.current) {
+            comboRef.current.blur();
+          }
+        }
+        return;
+      }
+      
+      if (event.metaKey || event.ctrlKey) {
+        if (event.key === 'f') {
+          event.preventDefault(); // Prevent browser's default find behavior
+          if (inputRef.current) {
+            inputRef.current.focus();
+          }
+        } else if (event.key === 'e') {
+          event.preventDefault(); // Prevent browser's default search behavior
+          if (comboRef.current && !comboRef.current.disabled) {
+            comboRef.current.focus();
+          }
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [listOpen]);
+
   const handlePromptSubmit = async () => {
     if (isWorking) return;
     const trimmed = q.trim();
@@ -161,31 +196,62 @@ export default function Home() {
     }
 
     setIsWorking(true);
-    setPromptPlaceholder("Planning order…");
+    setIsThinking(true);
+    setPromptPlaceholder("AI is thinking...");
 
     try {
-      const planRes = await fetch("/api/plan", {
+      // Prepare merchant data for the new API
+      let merchantId: string | undefined;
+      let configKey: string | undefined;
+
+      if (selectedMerchant.startsWith("firestore:")) {
+        merchantId = selectedMerchant.slice("firestore:".length);
+      } else {
+        configKey = selectedMerchant.replace("legacy:", "") || "a";
+      }
+
+      setPromptPlaceholder("🧠 Processing your order...");
+
+      const orderRes = await fetch("/api/order", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ query: trimmed }),
+        body: JSON.stringify({ 
+          query: trimmed,
+          merchantId,
+          configKey
+        }),
       });
-      const planPayload = await planRes.json();
-      if (!planRes.ok) {
-        throw new Error(typeof planPayload?.error === "string" ? planPayload.error : "Planning failed");
+      
+      const orderPayload = await orderRes.json();
+      if (!orderRes.ok) {
+        const errorMsg = typeof orderPayload?.error === "string" ? orderPayload.error : "Order processing failed";
+        throw new Error(errorMsg);
       }
-      const planData = planPayload as OrderJSON;
-      setPromptPlaceholder("Executing order…");
-      await executeOrder(planData, token, selectedMerchant);
-      setPromptPlaceholder("Order submitted ✓");
+
+      // Store order data and redirect to checkout
+      sessionStorage.setItem('orderData', JSON.stringify(orderPayload));
+      setPromptPlaceholder("Order processed successfully!");
       setQ("");
+      
+      // Small delay to show success message
+      setTimeout(() => {
+        window.location.href = '/checkout';
+      }, 1000);
+      
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to process. Try again.";
-      setPromptPlaceholder(message);
+      setPromptPlaceholder(`❌ ${message}`);
+      
+      // Reset placeholder after 3 seconds
+      setTimeout(() => {
+        setPromptPlaceholder("Large oat latte + chocolate croissant at 12:30 pickup");
+      }, 3000);
     } finally {
       setIsWorking(false);
+      setIsThinking(false);
     }
   };
 
@@ -207,7 +273,7 @@ export default function Home() {
           },
         },
         {
-          label: "Switch to Merchant",
+          label: "Manage Stores",
           action: () => {
             setMenuOpen(false);
             window.location.href = "/merchant/manage";
@@ -268,10 +334,15 @@ export default function Home() {
 
         <div ref={dropdownRef} className="combo">
           <input
+            ref={comboRef}
             className="combo-input"
-            placeholder="Search merchants"
+            placeholder="Where can we get something delicious?"
             value={searchTerm}
             onFocus={() => setListOpen(true)}
+            onBlur={() => {
+              // Delay hiding to allow clicking on menu items
+              setTimeout(() => setListOpen(false), 150);
+            }}
             onChange={(event) => {
               setSearchTerm(event.target.value);
               setListOpen(true);
@@ -296,6 +367,9 @@ export default function Home() {
 
         <div className="prompt-wrapper">
           <input
+            ref={inputRef}
+            id="prompt-input"
+            name="prompt-input"
             className="prompt-input"
             placeholder={promptPlaceholder}
             value={q}
@@ -307,47 +381,38 @@ export default function Home() {
               }
             }}
             disabled={isWorking}
+            style={{
+              border: "none",
+              background: "transparent",
+              outline: "none"
+            }}
           />
-          {/* <p className="prompt-hint">Press Enter to send. We’ll plan and execute instantly.</p> */}
+          
+          {/* Thinking Animation */}
+          {isThinking && (
+            <div style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "12px",
+              marginTop: "20px"
+            }}>
+              <div className="thinking-card" />
+              <span style={{
+                fontSize: "14px",
+                color: "#6b7280",
+                fontWeight: "500"
+              }}>
+                aisap thinking...
+              </span>
+            </div>
+          )}
+          
+          {/* <p className="prompt-hint">Press Enter to send. We'll plan and execute instantly.</p> */}
         </div>
       </section>
     </main>
   );
 }
 
-async function executeOrder(planData: OrderJSON, token: string, selection: string) {
-  const payload: Record<string, unknown> = { plan: planData };
-  let merchantIdentifier = selection;
-
-  if (selection.startsWith("firestore:")) {
-    const firestoreId = selection.slice("firestore:".length);
-    payload.merchantId = firestoreId;
-    merchantIdentifier = firestoreId;
-  } else {
-    const legacyKey = (selection.replace("legacy:", "") || "a") as ConfigKey;
-    payload.configKey = legacyKey;
-    merchantIdentifier = legacyKey;
-  }
-
-  const execRes = await fetch("/api/execute", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(payload),
-  });
-  const execData: ExecuteResponse = await execRes.json();
-  if (!execRes.ok || !execData.ok) {
-    throw new Error(typeof execData?.error === "string" ? execData.error : "Execution failed");
-  }
-
-  fetch("/api/orders", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ plan: planData, merchant: merchantIdentifier, status: "PASS" }),
-  }).catch(() => {});
-}

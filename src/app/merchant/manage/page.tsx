@@ -30,20 +30,31 @@ export default function ManageMerchants() {
 
   useEffect(() => {
     let active = true;
-    fetch("/api/merchants", { cache: "no-store" })
+    
+    if (!user?.email) {
+      console.log("No user email, clearing merchants");
+      setMerchants([]);
+      return;
+    }
+    
+    console.log("Fetching merchants for email:", user.email);
+    
+    fetch(`/api/merchants?ownerEmail=${encodeURIComponent(user.email)}`, { cache: "no-store" })
       .then((res) => res.json())
       .then((data) => {
         if (!active) return;
+        console.log("Received merchants data:", data);
         setMerchants(Array.isArray(data?.merchants) ? data.merchants : []);
       })
-      .catch(() => {
+      .catch((error) => {
         if (!active) return;
+        console.error("Error fetching merchants:", error);
         setMerchants([]);
       });
     return () => {
       active = false;
     };
-  }, []);
+  }, [user?.email]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -59,11 +70,8 @@ export default function ManageMerchants() {
   }, [menuOpen]);
 
   const filteredMerchants = useMemo(() => {
-    if (!user) return [];
-    return merchants.filter(
-      (merchant) => merchant.ownerUid === user.uid || merchant.ownerEmail === user.email,
-    );
-  }, [merchants, user]);
+    return merchants; // No need to filter client-side anymore
+  }, [merchants]);
 
   const menuItems = user
     ? [
@@ -109,7 +117,7 @@ export default function ManageMerchants() {
                 <path d="M4 21v-2h16v2H4Zm4-4q-1.65 0-2.825-1.175T4 13V3h16q.825 0 1.413.588T22 5v3q0 .825-.588 1.413T20 10h-2v3q0 1.65-1.175 2.825T14 17H8Zm10-9h2V5h-2v3ZM8 15h6q.825 0 1.413-.588T16 13V5h-6v.4l1.8 1.45q.05.05.2.4v4.25q0 .2-.15.35t-.35.15h-4q-.2 0-.35-.15T7 11.5V7.25q0-.05.2-.4L9 5.4V5H6v8q0 .825.588 1.413T8 15Zm3-5ZM9 5h1h-1Z" />
               </svg>
             </span>
-            <header className="app-header">Switch Merchant</header>
+            <header className="app-header">Manage Stores</header>
           </div>
 
           <div className="card-header-chip" ref={menuRef}>

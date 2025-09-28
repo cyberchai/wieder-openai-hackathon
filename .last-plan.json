@@ -1,14 +1,21 @@
 {
   "items": [
     {
-      "name": "smoothie",
+      "name": "latte",
       "size": "large",
+      "modifiers": [
+        "oat milk"
+      ]
+    },
+    {
+      "name": "chocolate croissant",
+      "size": "standard",
       "modifiers": []
     }
   ],
   "fulfillment": {
     "type": "pickup",
-    "time": ""
+    "time": "12:30"
   },
   "customer": {
     "name": "",

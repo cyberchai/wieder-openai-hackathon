@@ -4,8 +4,24 @@ import { listMerchants, createMerchant, ensureUniqueId } from "@/src/lib/merchan
 import type { MerchantConfig } from "@/src/types/merchant";
 import { slugify } from "@/src/lib/slug";
 
-export async function GET() {
+export async function GET(req: Request) {
+  const url = new URL(req.url);
+  const ownerEmail = url.searchParams.get('ownerEmail');
+  
+  console.log("API: Fetching merchants, ownerEmail:", ownerEmail);
+  
   const merchants = await listMerchants();
+  console.log("API: Total merchants found:", merchants.length);
+  console.log("API: Merchant ownerEmails:", merchants.map(m => ({ id: m.id, ownerEmail: m.ownerEmail })));
+  
+  if (ownerEmail) {
+    const filteredMerchants = merchants.filter(
+      merchant => merchant.ownerEmail === ownerEmail
+    );
+    console.log("API: Filtered merchants for", ownerEmail, ":", filteredMerchants.length);
+    return NextResponse.json({ merchants: filteredMerchants });
+  }
+  
   return NextResponse.json({ merchants });
 }
 
