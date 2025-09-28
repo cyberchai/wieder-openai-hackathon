@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import Papa from "papaparse";
 import type { MerchantConfig } from "@/src/types/merchant";
-import { auth } from "@/src/lib/firebaseClient";
+import { auth, googleProvider, onAuthStateChanged, signInWithPopup, signOut } from "@/src/lib/firebaseClient";
 
 function uniq<T>(arr: T[]): T[] {
   return Array.from(new Set(arr));
@@ -18,6 +18,9 @@ function splitMulti(value?: string): string[] {
 }
 
 export default function NewMerchant() {
+  const [user, setUser] = useState<{ uid: string; email: string | null } | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const [name, setName] = useState("");
   const [baseUrl, setBaseUrl] = useState("http://localhost:3000/mock-cafe");
   const [itemsText, setItemsText] = useState("Matcha Latte\nCold Brew\nOat Latte");
@@ -34,6 +37,72 @@ export default function NewMerchant() {
     sizes: [],
     modifiers: [],
   });
+  const [activeTab, setActiveTab] = useState<'file' | 'url'>('file');
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (current) => {
+      if (current) {
+        setUser({ uid: current.uid, email: current.email });
+      } else {
+        setUser(null);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onOutside = (event: MouseEvent | TouchEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onOutside);
+    document.addEventListener("touchstart", onOutside);
+    return () => {
+      document.removeEventListener("mousedown", onOutside);
+      document.removeEventListener("touchstart", onOutside);
+    };
+  }, [menuOpen]);
+
+  const menuItems = user
+    ? [
+        {
+          label: "Back to planner",
+          action: () => {
+            setMenuOpen(false);
+            window.location.href = "/";
+          },
+        },
+        {
+          label: "Manage merchants",
+          action: () => {
+            setMenuOpen(false);
+            window.location.href = "/merchant/manage";
+          },
+        },
+        {
+          label: "View orders",
+          action: () => {
+            setMenuOpen(false);
+            window.location.href = "/orders";
+          },
+        },
+        {
+          label: "Sign out",
+          action: async () => {
+            await signOut(auth);
+            setMenuOpen(false);
+          },
+        },
+      ]
+    : [
+        {
+          label: "Sign in with Google",
+          action: async () => {
+            await signInWithPopup(auth, googleProvider);
+            setMenuOpen(false);
+          },
+        },
+      ];
 
   async function readCsvFromFile(file: File): Promise<{ data: Record<string, unknown>[]; fields: string[] }> {
     return new Promise((resolve, reject) => {
@@ -230,152 +299,561 @@ export default function NewMerchant() {
   }
 
   return (
-    <main className="max-w-3xl mx-auto p-6 space-y-4">
-      <h1 className="text-xl font-semibold">New Merchant</h1>
-      <form onSubmit={submit} className="space-y-3">
-        <input
-          className="border p-2 w-full"
-          placeholder="Merchant name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <input
-          className="border p-2 w-full"
-          placeholder="Base URL (e.g., http://localhost:3000/mock-cafe)"
-          value={baseUrl}
-          onChange={(e) => setBaseUrl(e.target.value)}
-        />
-        <section className="border rounded p-3 space-y-3">
-          <h2 className="font-medium">Import from CSV / Google Sheets</h2>
-          <p className="text-xs text-gray-600">
-            CSV columns supported: <code>name</code> (required), <code>size</code> (optional), <code>modifier</code> (optional).
-            Sizes/modifiers can be separated by comma, semicolon, or pipe. Google Sheets: Publish to the web → CSV.
-          </p>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-sm block mb-1">Upload CSV file</label>
-              <input type="file" accept=".csv,text/csv" onChange={(event) => setCsvFile(event.target.files?.[0] || null)} />
-            </div>
-            <div>
-              <label className="text-sm block mb-1">CSV URL (Google Sheets “Publish to web” CSV)</label>
-              <input
-                className="border p-2 w-full"
-                placeholder="https://docs.google.com/.../export?format=csv"
-                value={csvUrl}
-                onChange={(event) => setCsvUrl(event.target.value)}
-              />
-            </div>
+    <main className="app-shell">
+      <section className="card">
+        <div className="card-header-row">
+          <div className="card-header">
+            <span className="app-logo" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M4 21v-2h16v2H4Zm4-4q-1.65 0-2.825-1.175T4 13V3h16q.825 0 1.413.588T22 5v3q0 .825-.588 1.413T20 10h-2v3q0 1.65-1.175 2.825T14 17H8Zm10-9h2V5h-2v3ZM8 15h6q.825 0 1.413-.588T16 13V5h-6v.4l1.8 1.45q.05.05.2.4v4.25q0 .2-.15.35t-.35.15h-4q-.2 0-.35-.15T7 11.5V7.25q0-.05.2-.4L9 5.4V5H6v8q0 .825.588 1.413T8 15Zm3-5ZM9 5h1h-1Z" />
+              </svg>
+            </span>
+            <header className="app-header">New Merchant</header>
           </div>
 
-          {csvCols.length > 0 && (
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className="text-sm block mb-1">Item name column</label>
-                <select
-                  className="border p-2 w-full"
-                  value={colMap.name || ""}
-                  onChange={(event) => setColMap({ ...colMap, name: event.target.value || undefined })}
-                >
-                  <option value="">-- Select --</option>
-                  {csvCols.map((col) => (
-                    <option key={col} value={col}>
-                      {col}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-sm block mb-1">Size column (optional)</label>
-                <select
-                  className="border p-2 w-full"
-                  value={colMap.size || ""}
-                  onChange={(event) => setColMap({ ...colMap, size: event.target.value || undefined })}
-                >
-                  <option value="">-- None --</option>
-                  {csvCols.map((col) => (
-                    <option key={col} value={col}>
-                      {col}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-sm block mb-1">Modifier column (optional)</label>
-                <select
-                  className="border p-2 w-full"
-                  value={colMap.modifier || ""}
-                  onChange={(event) => setColMap({ ...colMap, modifier: event.target.value || undefined })}
-                >
-                  <option value="">-- None --</option>
-                  {csvCols.map((col) => (
-                    <option key={col} value={col}>
-                      {col}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          )}
-
-          <div className="flex items-center gap-3">
-            <button type="button" className="border px-3 py-2 rounded" onClick={handleDetectColumns}>
-              Detect Columns
+          <div className="card-header-chip" ref={menuRef}>
+            <button type="button" className="chip" onClick={() => setMenuOpen((open) => !open)}>
+              {user?.email || "Sign in"}
             </button>
-            <button type="button" className="bg-black text-white px-3 py-2 rounded" onClick={handleParseCsv}>
-              Parse CSV
-            </button>
-            <button type="button" className="border px-3 py-2 rounded" onClick={applyCsvToForm} disabled={!csvPreview.items.length}>
-              Apply to form
-            </button>
-          </div>
-
-          {!!csvRows.length && (
-            <div className="text-xs">
-              <p className="font-medium mt-2">Parsed rows: {csvRows.length}</p>
-              <p>
-                Preview items: {csvPreview.items.slice(0, 8).join(", ")}
-                {csvPreview.items.length > 8 ? " ..." : ""}
-              </p>
-              <p>
-                Preview sizes: {csvPreview.sizes.slice(0, 8).join(", ")}
-                {csvPreview.sizes.length > 8 ? " ..." : ""}
-              </p>
-              <p>
-                Preview modifiers: {csvPreview.modifiers.slice(0, 12).join(", ")}
-                {csvPreview.modifiers.length > 12 ? " ..." : ""}
-              </p>
-            </div>
-          )}
-        </section>
-        <div className="grid grid-cols-3 gap-3">
-          <div>
-            <label className="text-sm">Items</label>
-            <textarea
-              className="border p-2 w-full h-32"
-              value={itemsText}
-              onChange={(e) => setItemsText(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="text-sm">Sizes</label>
-            <textarea
-              className="border p-2 w-full h-32"
-              value={sizesText}
-              onChange={(e) => setSizesText(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="text-sm">Modifiers</label>
-            <textarea
-              className="border p-2 w-full h-32"
-              value={modsText}
-              onChange={(e) => setModsText(e.target.value)}
-            />
+            {menuOpen && (
+              <div className="chip-menu">
+                {menuItems.map((item) => (
+                  <button key={item.label} type="button" onClick={item.action}>
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
-        <button className="bg-black text-white px-4 py-2 rounded">Create</button>
-      </form>
-      {msg && <p className="text-sm">{msg}</p>}
+
+        <div style={{ padding: "0 32px 40px" }}>
+          <form onSubmit={submit}>
+            {/* Basic Info Section */}
+            <div style={{ marginBottom: "40px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "32px" }}>
+                <div>
+                  <label htmlFor="merchant-name" style={{ display: "block", marginBottom: "12px", fontSize: "16px", fontWeight: "600", color: "#374151" }}>
+                    Merchant Name
+                  </label>
+                  <input
+                    id="merchant-name"
+                    name="merchant-name"
+                    type="text"
+                    placeholder="Enter merchant name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "16px 24px",
+                      fontSize: "16px",
+                      fontWeight: "600",
+                      border: "2px solid #000",
+                      borderRadius: "999px",
+                      outline: "none",
+                      backgroundColor: "#fff"
+                    }}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="base-url" style={{ display: "block", marginBottom: "12px", fontSize: "16px", fontWeight: "600", color: "#374151" }}>
+                    Base URL
+                  </label>
+                  <input
+                    id="base-url"
+                    name="base-url"
+                    type="text"
+                    placeholder="http://localhost:3000/mock-cafe"
+                    value={baseUrl}
+                    onChange={(e) => setBaseUrl(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "16px 24px",
+                      fontSize: "16px",
+                      fontWeight: "600",
+                      border: "2px solid #000",
+                      borderRadius: "999px",
+                      outline: "none",
+                      backgroundColor: "#fff"
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* CSV Import Section */}
+            <div style={{ 
+              marginBottom: "40px", 
+              padding: "32px", 
+              border: "2px solid #000", 
+              borderRadius: "24px", 
+              backgroundColor: "#f8fafc" 
+            }}>
+              <h2 style={{ fontSize: "24px", fontWeight: "600", marginBottom: "16px", color: "#111827" }}>
+                Import from CSV / Google Sheets
+              </h2>
+              <p style={{ fontSize: "16px", color: "#6b7280", marginBottom: "32px", lineHeight: "1.6" }}>
+                CSV columns supported: <code style={{ backgroundColor: "#e5e7eb", padding: "4px 8px", borderRadius: "4px", fontSize: "14px" }}>name</code> (required), 
+                <code style={{ backgroundColor: "#e5e7eb", padding: "4px 8px", borderRadius: "4px", fontSize: "14px" }}>size</code> (optional), 
+                <code style={{ backgroundColor: "#e5e7eb", padding: "4px 8px", borderRadius: "4px", fontSize: "14px" }}>modifier</code> (optional).
+                <br />
+                Sizes/modifiers can be separated by comma, semicolon, or pipe. Google Sheets: Publish to the web → CSV.
+              </p>
+              
+              {/* Tab Slider */}
+              <div style={{ marginBottom: "32px" }}>
+                <div style={{ 
+                  display: "flex", 
+                  backgroundColor: "#e5e7eb", 
+                  borderRadius: "12px", 
+                  padding: "4px",
+                  marginBottom: "24px",
+                  width: "fit-content",
+                  position: "relative"
+                }}>
+                  {/* Active tab highlight */}
+                  <div style={{
+                    position: "absolute",
+                    top: "4px",
+                    left: activeTab === 'file' ? "4px" : "50%",
+                    width: "50%",
+                    height: "calc(100% - 8px)",
+                    backgroundColor: "#fff",
+                    borderRadius: "8px",
+                    transition: "left 0.2s ease",
+                    boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
+                  }} />
+                  
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('file')}
+                    style={{
+                      padding: "12px 24px",
+                      fontSize: "16px",
+                      fontWeight: "600",
+                      border: "none",
+                      borderRadius: "8px",
+                      cursor: "pointer",
+                      backgroundColor: "transparent",
+                      color: "#374151",
+                      transition: "color 0.2s ease",
+                      position: "relative",
+                      zIndex: 1
+                    }}
+                  >
+                    Upload File
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('url')}
+                    style={{
+                      padding: "12px 24px",
+                      fontSize: "16px",
+                      fontWeight: "600",
+                      border: "none",
+                      borderRadius: "8px",
+                      cursor: "pointer",
+                      backgroundColor: "transparent",
+                      color: "#374151",
+                      transition: "color 0.2s ease",
+                      position: "relative",
+                      zIndex: 1
+                    }}
+                  >
+                    CSV URL
+                  </button>
+                </div>
+
+                {/* Tab Content */}
+                {activeTab === 'file' && (
+                  <div>
+                    <label htmlFor="csv-file" style={{ display: "block", marginBottom: "12px", fontSize: "16px", fontWeight: "600", color: "#374151" }}>
+                      Upload CSV file
+                    </label>
+                    <div style={{ position: "relative", width: "100%" }}>
+                      <input 
+                        id="csv-file"
+                        name="csv-file"
+                        type="file" 
+                        accept=".csv,text/csv" 
+                        onChange={(event) => setCsvFile(event.target.files?.[0] || null)}
+                        style={{
+                          position: "absolute",
+                          width: "100%",
+                          height: "100%",
+                          opacity: 0,
+                          cursor: "pointer",
+                          zIndex: 2
+                        }}
+                      />
+                      <div style={{
+                        width: "100%",
+                        padding: "16px 24px",
+                        fontSize: "16px",
+                        fontWeight: "600",
+                        border: "2px solid #000",
+                        borderRadius: "999px",
+                        backgroundColor: "#fff",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        minHeight: "56px"
+                      }}>
+                        <span style={{ color: csvFile ? "#000" : "#9ca3af" }}>
+                          {csvFile ? csvFile.name : "Choose CSV file..."}
+                        </span>
+                        <span style={{ 
+                          fontSize: "14px", 
+                          color: "#6b7280",
+                          fontWeight: "500"
+                        }}>
+                          Browse
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'url' && (
+                  <div>
+                    <label htmlFor="csv-url" style={{ display: "block", marginBottom: "12px", fontSize: "16px", fontWeight: "600", color: "#374151" }}>
+                      CSV URL (Google Sheets "Publish to web" CSV)
+                    </label>
+                    <input
+                      id="csv-url"
+                      name="csv-url"
+                      type="text"
+                      placeholder="https://docs.google.com/.../export?format=csv"
+                      value={csvUrl || ""}
+                      onChange={(event) => setCsvUrl(event.target.value)}
+                      style={{
+                        width: "100%",
+                        padding: "16px 24px",
+                        fontSize: "16px",
+                        fontWeight: "600",
+                        border: "2px solid #000",
+                        borderRadius: "999px",
+                        outline: "none",
+                        backgroundColor: "#fff"
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {csvCols.length > 0 && (
+                <div style={{ marginBottom: "32px" }}>
+                  <h3 style={{ fontSize: "20px", fontWeight: "600", marginBottom: "24px", color: "#111827" }}>Column Mapping</h3>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "24px" }}>
+                    <div>
+                      <label htmlFor="col-name" style={{ display: "block", marginBottom: "12px", fontSize: "16px", fontWeight: "600", color: "#374151" }}>
+                        Item name column
+                      </label>
+                      <select
+                        id="col-name"
+                        name="col-name"
+                        value={colMap.name || ""}
+                        onChange={(event) => setColMap({ ...colMap, name: event.target.value || undefined })}
+                        style={{
+                          width: "100%",
+                          padding: "16px",
+                          fontSize: "16px",
+                          border: "2px solid #000",
+                          borderRadius: "12px",
+                          outline: "none",
+                          backgroundColor: "#fff"
+                        }}
+                      >
+                        <option value="">-- Select --</option>
+                        {csvCols.map((col) => (
+                          <option key={col} value={col}>{col}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor="col-size" style={{ display: "block", marginBottom: "12px", fontSize: "16px", fontWeight: "600", color: "#374151" }}>
+                        Size column (optional)
+                      </label>
+                      <select
+                        id="col-size"
+                        name="col-size"
+                        value={colMap.size || ""}
+                        onChange={(event) => setColMap({ ...colMap, size: event.target.value || undefined })}
+                        style={{
+                          width: "100%",
+                          padding: "16px",
+                          fontSize: "16px",
+                          border: "2px solid #000",
+                          borderRadius: "12px",
+                          outline: "none",
+                          backgroundColor: "#fff"
+                        }}
+                      >
+                        <option value="">-- None --</option>
+                        {csvCols.map((col) => (
+                          <option key={col} value={col}>{col}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor="col-modifier" style={{ display: "block", marginBottom: "12px", fontSize: "16px", fontWeight: "600", color: "#374151" }}>
+                        Modifier column (optional)
+                      </label>
+                      <select
+                        id="col-modifier"
+                        name="col-modifier"
+                        value={colMap.modifier || ""}
+                        onChange={(event) => setColMap({ ...colMap, modifier: event.target.value || undefined })}
+                        style={{
+                          width: "100%",
+                          padding: "16px",
+                          fontSize: "16px",
+                          border: "2px solid #000",
+                          borderRadius: "12px",
+                          outline: "none",
+                          backgroundColor: "#fff"
+                        }}
+                      >
+                        <option value="">-- None --</option>
+                        {csvCols.map((col) => (
+                          <option key={col} value={col}>{col}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: "flex", justifyContent: "center", gap: "24px", marginBottom: "24px" }}>
+                <button 
+                  type="button" 
+                  onClick={handleDetectColumns}
+                  style={{
+                    padding: "12px 24px",
+                    fontSize: "16px",
+                    fontWeight: "600",
+                    border: "2px solid #000",
+                    borderRadius: "999px",
+                    backgroundColor: "#fff",
+                    color: "#000",
+                    cursor: "pointer"
+                  }}
+                >
+                  Detect Columns
+                </button>
+                <button 
+                  type="button" 
+                  onClick={handleParseCsv}
+                  style={{
+                    padding: "12px 24px",
+                    fontSize: "16px",
+                    fontWeight: "600",
+                    border: "2px solid #000",
+                    borderRadius: "999px",
+                    backgroundColor: "#000",
+                    color: "#fff",
+                    cursor: "pointer"
+                  }}
+                >
+                  Parse CSV
+                </button>
+                <button 
+                  type="button" 
+                  onClick={applyCsvToForm} 
+                  disabled={!csvPreview.items.length}
+                  style={{
+                    padding: "12px 24px",
+                    fontSize: "16px",
+                    fontWeight: "600",
+                    border: "2px solid #000",
+                    borderRadius: "999px",
+                    backgroundColor: "#fff",
+                    color: "#000",
+                    cursor: csvPreview.items.length ? "pointer" : "not-allowed",
+                    opacity: csvPreview.items.length ? 1 : 0.5
+                  }}
+                >
+                  Apply to form
+                </button>
+              </div>
+
+              {!!csvRows.length && (
+                <div style={{ 
+                  backgroundColor: "#fff", 
+                  padding: "24px", 
+                  borderRadius: "16px", 
+                  border: "2px solid #e5e7eb" 
+                }}>
+                  <h4 style={{ fontWeight: "600", marginBottom: "16px", color: "#111827" }}>CSV Preview</h4>
+                  <div style={{ fontSize: "14px" }}>
+                    <p style={{ marginBottom: "8px" }}><strong>Parsed rows:</strong> {csvRows.length}</p>
+                    <p style={{ marginBottom: "8px" }}><strong>Preview items:</strong> <span style={{ color: "#6b7280" }}>{csvPreview.items.slice(0, 8).join(", ")}{csvPreview.items.length > 8 ? " ..." : ""}</span></p>
+                    <p style={{ marginBottom: "8px" }}><strong>Preview sizes:</strong> <span style={{ color: "#6b7280" }}>{csvPreview.sizes.slice(0, 8).join(", ")}{csvPreview.sizes.length > 8 ? " ..." : ""}</span></p>
+                    <p><strong>Preview modifiers:</strong> <span style={{ color: "#6b7280" }}>{csvPreview.modifiers.slice(0, 12).join(", ")}{csvPreview.modifiers.length > 12 ? " ..." : ""}</span></p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Menu Configuration Section */}
+            <div style={{ 
+              marginBottom: "40px", 
+              padding: "32px", 
+              border: "2px solid #000", 
+              borderRadius: "24px", 
+              backgroundColor: "#f8fafc" 
+            }}>
+              <h3 style={{ fontSize: "24px", fontWeight: "600", marginBottom: "32px", color: "#111827" }}>
+                Menu Configuration
+              </h3>
+              
+              <div style={{ display: "flex", flexDirection: "column", gap: "32px" }}>
+                <div>
+                  <label htmlFor="items-text" style={{ display: "block", marginBottom: "12px", fontSize: "16px", fontWeight: "600", color: "#374151" }}>
+                    Items
+                  </label>
+                  <textarea
+                    id="items-text"
+                    name="items-text"
+                    value={itemsText}
+                    onChange={(e) => {
+                      setItemsText(e.target.value);
+                      e.target.style.height = 'auto';
+                      const newHeight = Math.min(e.target.scrollHeight, 400);
+                      e.target.style.height = newHeight + 'px';
+                      // Decrease border radius when content expands beyond original height
+                      if (newHeight > 140) {
+                        e.target.style.borderRadius = "16px";
+                      } else {
+                        e.target.style.borderRadius = "999px";
+                      }
+                    }}
+                    style={{
+                      width: "100%",
+                      padding: "16px 24px",
+                      fontSize: "16px",
+                      fontWeight: "600",
+                      border: "2px solid #000",
+                      borderRadius: "999px",
+                      outline: "none",
+                      backgroundColor: "#fff",
+                      resize: "none",
+                      minHeight: "140px",
+                      maxHeight: "400px"
+                    }}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="sizes-text" style={{ display: "block", marginBottom: "12px", fontSize: "16px", fontWeight: "600", color: "#374151" }}>
+                    Sizes
+                  </label>
+                  <textarea
+                    id="sizes-text"
+                    name="sizes-text"
+                    value={sizesText}
+                    onChange={(e) => {
+                      setSizesText(e.target.value);
+                      e.target.style.height = 'auto';
+                      const newHeight = Math.min(e.target.scrollHeight, 400);
+                      e.target.style.height = newHeight + 'px';
+                      // Decrease border radius when content expands beyond original height
+                      if (newHeight > 140) {
+                        e.target.style.borderRadius = "16px";
+                      } else {
+                        e.target.style.borderRadius = "999px";
+                      }
+                    }}
+                    style={{
+                      width: "100%",
+                      padding: "16px 24px",
+                      fontSize: "16px",
+                      fontWeight: "600",
+                      border: "2px solid #000",
+                      borderRadius: "999px",
+                      outline: "none",
+                      backgroundColor: "#fff",
+                      resize: "none",
+                      minHeight: "140px",
+                      maxHeight: "400px"
+                    }}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="modifiers-text" style={{ display: "block", marginBottom: "12px", fontSize: "16px", fontWeight: "600", color: "#374151" }}>
+                    Modifiers
+                  </label>
+                  <textarea
+                    id="modifiers-text"
+                    name="modifiers-text"
+                    value={modsText}
+                    onChange={(e) => {
+                      setModsText(e.target.value);
+                      e.target.style.height = 'auto';
+                      const newHeight = Math.min(e.target.scrollHeight, 400);
+                      e.target.style.height = newHeight + 'px';
+                      // Decrease border radius when content expands beyond original height
+                      if (newHeight > 140) {
+                        e.target.style.borderRadius = "16px";
+                      } else {
+                        e.target.style.borderRadius = "999px";
+                      }
+                    }}
+                    style={{
+                      width: "100%",
+                      padding: "16px 24px",
+                      fontSize: "16px",
+                      fontWeight: "600",
+                      border: "2px solid #000",
+                      borderRadius: "999px",
+                      outline: "none",
+                      backgroundColor: "#fff",
+                      resize: "none",
+                      minHeight: "140px",
+                      maxHeight: "400px"
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Submit Button */}
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: "24px" }}>
+              <button 
+                type="submit"
+                style={{
+                  padding: "16px 48px",
+                  fontSize: "18px",
+                  fontWeight: "600",
+                  border: "2px solid #000",
+                  borderRadius: "999px",
+                  backgroundColor: "#000",
+                  color: "#fff",
+                  cursor: "pointer"
+                }}
+              >
+                Create Merchant
+              </button>
+            </div>
+
+            {/* Message */}
+            {msg && (
+              <div style={{ textAlign: "center" }}>
+                <div style={{ 
+                  backgroundColor: "#f9fafb", 
+                  padding: "16px", 
+                  borderRadius: "16px", 
+                  border: "2px solid #e5e7eb", 
+                  maxWidth: "400px", 
+                  margin: "0 auto" 
+                }}>
+                  <p style={{ fontSize: "14px", color: "#6b7280" }}>{msg}</p>
+                </div>
+              </div>
+            )}
+          </form>
+        </div>
+      </section>
     </main>
   );
 }

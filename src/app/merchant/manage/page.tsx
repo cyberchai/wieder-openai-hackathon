@@ -114,7 +114,7 @@ export default function ManageMerchants() {
 
           <div className="card-header-chip" ref={menuRef}>
             <button type="button" className="chip" onClick={() => setMenuOpen((open) => !open)}>
-              {user?.email ? user.email[0]?.toUpperCase() : "?"}
+              {user?.email || "Sign in"}
             </button>
             {menuOpen && (
               <div className="chip-menu">

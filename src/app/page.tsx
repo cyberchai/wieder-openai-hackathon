@@ -11,7 +11,6 @@ import {
 import type { OrderJSON } from "@/src/types/order";
 
 const STORAGE_KEY = "asaply.selectedMerchant";
-const HOLD_DURATION = 600;
 
 type ConfigKey = "a" | "b";
 
@@ -51,8 +50,6 @@ export default function Home() {
 
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const holdTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const holdTriggered = useRef(false);
 
   const mergedMerchants = useMemo(
     () => [
@@ -198,7 +195,7 @@ export default function Home() {
     setListOpen(false);
   };
 
-  const chipLabel = email ? email[0]?.toUpperCase() : "?";
+  const chipLabel = email || "Sign in";
 
   const menuItems = email
     ? [
@@ -207,6 +204,13 @@ export default function Home() {
           action: () => {
             setMenuOpen(false);
             window.location.href = "/orders";
+          },
+        },
+        {
+          label: "Switch to Merchant",
+          action: () => {
+            setMenuOpen(false);
+            window.location.href = "/merchant/manage";
           },
         },
         {
@@ -227,38 +231,6 @@ export default function Home() {
         },
       ];
 
-  const navigateToSwitch = () => {
-    window.location.href = "/merchant/manage";
-  };
-
-  const handleChipCancel = () => {
-    if (holdTimeout.current) {
-      clearTimeout(holdTimeout.current);
-      holdTimeout.current = null;
-    }
-    holdTriggered.current = false;
-  };
-
-  const handleChipPressStart = () => {
-    holdTriggered.current = false;
-    if (holdTimeout.current) clearTimeout(holdTimeout.current);
-    holdTimeout.current = setTimeout(() => {
-      holdTriggered.current = true;
-      setMenuOpen(false);
-      navigateToSwitch();
-    }, HOLD_DURATION);
-  };
-
-  const handleChipPressEnd = () => {
-    if (holdTimeout.current) {
-      clearTimeout(holdTimeout.current);
-      holdTimeout.current = null;
-    }
-    if (!holdTriggered.current) {
-      setMenuOpen((open) => !open);
-    }
-    holdTriggered.current = false;
-  };
 
   return (
     <main className="app-shell">
@@ -278,12 +250,7 @@ export default function Home() {
             <button
               type="button"
               className="chip"
-              onMouseDown={handleChipPressStart}
-              onMouseUp={handleChipPressEnd}
-              onMouseLeave={handleChipCancel}
-              onTouchStart={handleChipPressStart}
-              onTouchEnd={handleChipPressEnd}
-              onTouchCancel={handleChipCancel}
+              onClick={() => setMenuOpen((open) => !open)}
             >
               {chipLabel}
             </button>
@@ -341,7 +308,7 @@ export default function Home() {
             }}
             disabled={isWorking}
           />
-          <p className="prompt-hint">Press Enter to send. We’ll plan and execute instantly.</p>
+          {/* <p className="prompt-hint">Press Enter to send. We’ll plan and execute instantly.</p> */}
         </div>
       </section>
     </main>
