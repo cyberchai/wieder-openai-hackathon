@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   auth,
   googleProvider,
@@ -12,8 +12,6 @@ import {
 import type { OrderJSON } from "@/src/types/order";
 import styles from "./page.module.css";
 
-type ConfigKey = "a" | "b";
-
 type ExecuteResponse = {
   ok?: boolean;
   exitCode?: number;
@@ -21,15 +19,38 @@ type ExecuteResponse = {
   error?: string;
 };
 
+type ConfigKey = "a" | "b";
+
+const LEGACY_MERCHANTS = [
+  { id: "legacy:a", name: "ASAPly Demo Café A (Tall/Grande/Venti)" },
+  { id: "legacy:b", name: "ASAPly Demo Café B (Small/Medium/Large)" },
+];
+
+const STORAGE_KEY = "asaply.selectedMerchant";
+
+function normalizeSelection(saved: string | null, cloud: { id: string }[]): string {
+  if (!saved) return LEGACY_MERCHANTS[0]?.id ?? "legacy:a";
+  if (saved.startsWith("legacy:") || saved.startsWith("firestore:")) return saved;
+  if (saved === "a" || saved === "b") return `legacy:${saved}`;
+  if (cloud.some((merchant) => merchant.id === saved)) return `firestore:${saved}`;
+  return LEGACY_MERCHANTS[0]?.id ?? "legacy:a";
+}
+
 export default function Home() {
   const [email, setEmail] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [out, setOut] = useState<OrderJSON | null>(null);
   const [busy, setBusy] = useState(false);
-  const [configKey, setConfigKey] = useState<ConfigKey>("a");
-  const [merchantId, setMerchantId] = useState<string>("");
-  const [merchants, setMerchants] = useState<{ id: string; name: string }[]>([]);
+  const [cloudMerchants, setCloudMerchants] = useState<{ id: string; name: string }[]>([]);
+  const [selectedMerchant, setSelectedMerchant] = useState<string>(LEGACY_MERCHANTS[0].id);
+  const mergedMerchants = useMemo(
+    () => [
+      ...LEGACY_MERCHANTS,
+      ...cloudMerchants.map((merchant) => ({ id: `firestore:${merchant.id}`, name: merchant.name })),
+    ],
+    [cloudMerchants],
+  );
   const [feedback, setFeedback] = useState<string | null>(null);
   const [execLogs, setExecLogs] = useState<string>("");
   const [execNotice, setExecNotice] = useState<string | null>(null);
@@ -52,17 +73,45 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    fetch("/api/merchants")
+    let active = true;
+    fetch("/api/merchants", { cache: "no-store" })
       .then((res) => res.json())
       .then((data) => {
-        setMerchants(data.merchants || []);
+        if (!active) return;
+        const list = Array.isArray(data?.merchants) ? data.merchants : [];
+        setCloudMerchants(list);
         if (typeof window !== "undefined") {
-          const saved = localStorage.getItem("asaply.selectedMerchantId");
-          if (saved) setMerchantId(saved);
+          const stored = localStorage.getItem(STORAGE_KEY) || localStorage.getItem("asaply.selectedMerchantId");
+          const normalized = normalizeSelection(stored, list);
+          setSelectedMerchant(normalized);
+          localStorage.setItem(STORAGE_KEY, normalized);
+          localStorage.removeItem("asaply.selectedMerchantId");
         }
       })
-      .catch(() => setMerchants([]));
+      .catch(() => {
+        if (!active) return;
+        setCloudMerchants([]);
+        if (typeof window !== "undefined") {
+          const stored = localStorage.getItem(STORAGE_KEY) || localStorage.getItem("asaply.selectedMerchantId");
+          if (stored) {
+            const normalized = normalizeSelection(stored, []);
+            setSelectedMerchant(normalized);
+            localStorage.setItem(STORAGE_KEY, normalized);
+            localStorage.removeItem("asaply.selectedMerchantId");
+          }
+        }
+      });
+    return () => {
+      active = false;
+    };
   }, []);
+
+  useEffect(() => {
+    if (!mergedMerchants.length) return;
+    if (!mergedMerchants.some((merchant) => merchant.id === selectedMerchant)) {
+      setSelectedMerchant(mergedMerchants[0].id);
+    }
+  }, [mergedMerchants, selectedMerchant]);
 
   async function plan(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -121,11 +170,17 @@ export default function Home() {
     setExecNotice(null);
 
     try {
+      const selection = selectedMerchant;
       const payload: Record<string, unknown> = { plan: out };
-      if (merchantId) {
-        payload.merchantId = merchantId;
+      let merchantIdentifier = selection;
+      if (selection.startsWith("firestore:")) {
+        const firestoreId = selection.slice("firestore:".length);
+        payload.merchantId = firestoreId;
+        merchantIdentifier = firestoreId;
       } else {
-        payload.configKey = configKey;
+        const legacyKey = (selection.replace("legacy:", "") || "a") as ConfigKey;
+        payload.configKey = legacyKey;
+        merchantIdentifier = legacyKey;
       }
 
       const res = await fetch("/api/execute", {
@@ -153,7 +208,7 @@ export default function Home() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ plan: out, merchant: merchantId || configKey, status: "PASS" }),
+          body: JSON.stringify({ plan: out, merchant: merchantIdentifier, status: "PASS" }),
         }).catch(() => {
           /* ignore logging errors */
         });
@@ -213,40 +268,22 @@ export default function Home() {
         </div>
 
         <div className={styles.selectGroup}>
-          <label htmlFor="merchant" className={styles.selectLabel}>
-            Merchant configuration
-          </label>
-          <select
-            id="merchant"
-            className={styles.select}
-            value={configKey}
-            onChange={(event) => setConfigKey(event.target.value as ConfigKey)}
-          >
-            <option value="a">ASAPly Demo Café A (Tall/Grande/Venti)</option>
-            <option value="b">ASAPly Demo Café B (Small/Medium/Large)</option>
-          </select>
-        </div>
-
-        <div className={styles.selectGroup}>
           <label htmlFor="merchantSelect" className={styles.selectLabel}>
-            Firestore merchants
+            Merchant configuration
           </label>
           <select
             id="merchantSelect"
             className={styles.select}
-            value={merchantId}
+            value={selectedMerchant}
             onChange={(event) => {
               const value = event.target.value;
-              setMerchantId(value);
-              if (value) {
-                localStorage.setItem("asaply.selectedMerchantId", value);
-              } else {
-                localStorage.removeItem("asaply.selectedMerchantId");
+              setSelectedMerchant(value);
+              if (typeof window !== "undefined") {
+                localStorage.setItem(STORAGE_KEY, value);
               }
             }}
           >
-            <option value="">(Legacy) Demo A/B selector</option>
-            {merchants.map((merchant) => (
+            {mergedMerchants.map((merchant) => (
               <option key={merchant.id} value={merchant.id}>
                 {merchant.name}
               </option>

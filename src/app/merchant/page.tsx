@@ -9,7 +9,7 @@ export default function MerchantList() {
   const [rows, setRows] = useState<Row[]>([]);
 
   useEffect(() => {
-    fetch("/api/merchants")
+    fetch("/api/merchants", { cache: "no-store" })
       .then((res) => res.json())
       .then((data) => setRows(data.merchants || []))
       .catch(() => setRows([]));
